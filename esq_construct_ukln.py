@@ -436,101 +436,101 @@ if __name__=="__main__":
         const_q_matrix = const_q_matrix[:,comp.retained_indices]
         const_q2_matrix = const_q2_matrix[:,comp.retained_indices]
         niterations = len(comp.retained_indices)
-    Ref_state = 6 #Reference state of sampling to pull from
+    Ref_state = 4 #Reference state of sampling to pull from
     #if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata): #nand gate
     pdb.set_trace()
-    if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('esq_%s/ns%iNp%iQ%iEpsi%i.npz' % (spacename, nstates, Nparm, Nparm-1, Nparm-1)) and savedata) or timekln: #nand gate +timing flag
+    if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata) or timekln: #nand gate +timing flag
         #Create numpy arrys: q, epsi, sig
         DelF = numpy.zeros([Nparm, Nparm, Nparm])
         dDelF = numpy.zeros([Nparm, Nparm, Nparm])
-        f_k = comp.mbar.f_k
-        f_k_sub = numpy.zeros(Nallstates)
-        f_k_sub[:nstates] = f_k
-        N_k = comp.mbar.N_k
-        N_k_sub = numpy.zeros(Nallstates, numpy.int32)
-        N_k_sub[:nstates] = N_k
+        #f_k = comp.mbar.f_k
+        #f_k_sub = numpy.zeros(Nallstates)
+        #f_k_sub[:nstates] = f_k
+        #N_k = comp.mbar.N_k
+        #N_k_sub = numpy.zeros(Nallstates, numpy.int32)
+        #N_k_sub[:nstates] = N_k
         #Populate energies
         run_start_time = time.time()
-        number_of_iterations = Nparm**2
+        number_of_iterations = Nparm
         iteration = 0
         #for iq in xrange(Nparm):
         #!!! 0-17, 17-34, 34-Nparm
         #!!! 0-25, 25-Nparm
-        number_of_iterations = len(range(25,Nparm))*Nparm
-        number_of_iterations = Nparm**2
+        number_of_iterations = Nparm
         for iq in xrange(Nparm):
             #Grab charge
             q = q_range[iq]
-            for iepsi in xrange(Nparm):
-                initial_time = time.time()
-                iteration += 1
-                print "Q index: %i/%i --- Epsi index: %i/%i" % (iq, Nparm-1, iepsi, Nparm-1)
-                #Save data files
-                if not (os.path.isfile('esq_%s/ns%iNp%iQ%iEpsi%i.npz' % (spacename, nstates, Nparm, iq, iepsi)) and savedata) or timekln: #nand gate + timing flag
+            initial_time = time.time()
+            iteration += 1
+            print "Q index: %i/%i" % (iq, Nparm-1)
+            #Using PerturpedFreeEnergies instead of recreating the MBAR object every time. Saves time with same accuracy
+            #Perturbed assumes all l states are unsampled
+            u_kln_P = numpy.zeros([nstates,Nparm**2,maxN]) 
+            #Save data files
+            if not (os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq)) and savedata) or timekln: #nand gate + timing flag
+                for iepsi in xrange(Nparm):
                     epsi = epsi_range[iepsi]
                     #Create Sub matrix
-                    u_kln_sub = numpy.zeros([Nallstates,Nallstates,niterations])
-                    u_kln_sub[:nstates,:nstates,:] = u_kln
-                    #Using PerturpedFreeEnergies instead of recreating the MBAR object every time. Saves time with same accuracy
-                    #Perturbed assumes all l states are unsampled
-                    u_kln_P = numpy.zeros([nstates,Nparm+offset,maxN]) 
-                    #Rebuild the reference state
-                    if includeRef:
-                        Repsi = epsi_samp_space[Ref_state]
-                        Rsig = sig_samp_space[Ref_state]
-                        u_kln_sub[:nstates,nstates,:] = flamC12sqrt(Repsi,Rsig)*const_R_matrix + flamC6sqrt(Repsi,Rsig)*const_A_matrix + const_unaffected_matrix
+                    #u_kln_sub = numpy.zeros([Nallstates,Nallstates,niterations])
+                    #u_kln_sub[:nstates,:nstates,:] = u_kln
+                    #DEBUG: Rebuild the reference state
+                    #if includeRef:
+                    #    Repsi = epsi_samp_space[Ref_state]
+                    #    Rsig = sig_samp_space[Ref_state]
+                    #    u_kln_sub[:nstates,nstates,:] = flamC12sqrt(Repsi,Rsig)*const_R_matrix + flamC6sqrt(Repsi,Rsig)*const_A_matrix + const_unaffected_matrix
                     for isig in xrange(Nparm):
                         sig = sig_range[isig]
-                        u_kln_sub[:nstates,isig+nstates+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix + flamC6sqrt(epsi,sig)*const_A_matrix + flamC1(q)*const_q_matrix + flamC1(q)**2*const_q2_matrix + const_unaffected_matrix
-                        u_kln_P[:,isig+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix[:,:maxN] + flamC6sqrt(epsi,sig)*const_A_matrix[:,:maxN] + flamC1(q)*const_q_matrix[:,:maxN] + flamC1(q)**2*const_q2_matrix[:,:maxN] + const_unaffected_matrix[:,:maxN]
-                    if not timekln:
-                        mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
-                        (DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-                        (PDeltaF_ij, PdDeltaF_ij) = comp.mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew')
-                    if savedata and not timekln:
-                        if not os.path.isdir('esq_%s' % spacename):
-                            os.makedirs('esq_%s' % spacename) #Create folder
-                        numpy.savez('esq_%s/ns%iNp%iQ%iEpsi%i.npz' % (spacename, nstates, Nparm, iq, iepsi), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
-                else:
-                    DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%iEpsi%i.npz' % (spacename, nstates, Nparm, iq, iepsi))
-                    #DeltaF_file = numpy.load('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, iepsi))
-                    DeltaF_ij = DeltaF_file['DeltaF_ij']
-                    dDeltaF_ij = DeltaF_file['dDeltaF_ij']
-                #printFreeEnergy(DeltaF_ij, dDeltaF_ij)
+                        lndx = isig + (iepsi*Nparm)
+                        #u_kln_sub[:nstates,isig+nstates+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix + flamC6sqrt(epsi,sig)*const_A_matrix + flamC1(q)*const_q_matrix + flamC1(q)**2*const_q2_matrix + const_unaffected_matrix
+                        u_kln_P[:,lndx+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix[:,:maxN] + flamC6sqrt(epsi,sig)*const_A_matrix[:,:maxN] + flamC1(q)*const_q_matrix[:,:maxN] + flamC1(q)**2*const_q2_matrix[:,:maxN] + const_unaffected_matrix[:,:maxN]
                 if not timekln:
-                    if includeRef:
-                        DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+offset:]
-                        dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+offset:]
-                    else:
-                        DelF[iq, iepsi,:] = DeltaF_ij[Ref_state,nstates:]
-                        dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state,nstates:]
-                laptime = time.clock()
-                # Show timing statistics. copied from Repex.py, copywrite John Chodera
-                final_time = time.time()
-                elapsed_time = final_time - initial_time
-                estimated_time_remaining = (final_time - run_start_time) / (iteration) * (number_of_iterations - iteration)
-                estimated_total_time = (final_time - run_start_time) / (iteration) * (number_of_iterations)
-                estimated_finish_time = final_time + estimated_time_remaining
-                print "Iteration took %.3f s." % elapsed_time
-                print "Estimated completion in %s, at %s (consuming total wall clock time %s)." % (str(datetime.timedelta(seconds=estimated_time_remaining)), time.ctime(estimated_finish_time), str(datetime.timedelta(seconds=estimated_total_time)))
+                    #mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
+                    #(DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
+                    (DeltaF_ij, dDeltaF_ij) = comp.mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew')
+                if savedata and not timekln:
+                    if not os.path.isdir('esq_%s' % spacename):
+                        os.makedirs('esq_%s' % spacename) #Create folder
+                    numpy.savez('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
+            else:
+                DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq))
+                DeltaF_ij = DeltaF_file['DeltaF_ij']
+                dDeltaF_ij = DeltaF_file['dDeltaF_ij']
+            #printFreeEnergy(DeltaF_ij, dDeltaF_ij)
+            if not timekln:
+                for iepsi in xrange(Nparm):
+                    #if includeRef:
+                    #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+offset:]
+                    #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+offset:]
+                    #Unwrap the data
+                    DelF[iq, iepsi,:] = DeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+            laptime = time.clock()
+            # Show timing statistics. copied from Repex.py, copywrite John Chodera
+            final_time = time.time()
+            elapsed_time = final_time - initial_time
+            estimated_time_remaining = (final_time - run_start_time) / (iteration) * (number_of_iterations - iteration)
+            estimated_total_time = (final_time - run_start_time) / (iteration) * (number_of_iterations)
+            estimated_finish_time = final_time + estimated_time_remaining
+            print "Iteration took %.3f s." % elapsed_time
+            print "Estimated completion in %s, at %s (consuming total wall clock time %s)." % (str(datetime.timedelta(seconds=estimated_time_remaining)), time.ctime(estimated_finish_time), str(datetime.timedelta(seconds=estimated_total_time)))
+            #Save a copy of just the Nparm**3 matrix in case I dont want to save a large number of files
             numpy.savez('esq_freeEnergies%s.npz'%spacename, free_energy=DelF, dfree_energy=dDelF)
     else:
         #if os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata: #Pull data from 
-        if os.path.isfile('esq_%s/ns%iNp%iQ%iEpsi%i.npz' % (spacename, nstates, Nparm, Nparm-1, Nparm-1)) and savedata: #Pull data from 
+        if os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata: #Pull data from 
             DelF = numpy.zeros([Nparm, Nparm, Nparm])
             dDelF = numpy.zeros([Nparm, Nparm, Nparm])
             for iq in xrange(Nparm):
+                DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%iEpsi%i.npz' % (spacename, nstates, Nparm, iq, iepsi))
+                DeltaF_ij = DeltaF_file['DeltaF_ij']
+                dDeltaF_ij = DeltaF_file['dDeltaF_ij']
                 for iepsi in xrange(Nparm):
-                    #DeltaF_file = numpy.load('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, iepsi))
-                    DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%iEpsi%i.npz' % (spacename, nstates, Nparm, iq, iepsi))
-                    DeltaF_ij = DeltaF_file['DeltaF_ij']
-                    dDeltaF_ij = DeltaF_file['dDeltaF_ij']
-                    if includeRef:
-                        DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+1:]
-                        dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+1:]
-                    else:
-                        DelF[iq, iepsi,:] = DeltaF_ij[Ref_state,nstates:]
-                        dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state,nstates:]
+                    #if includeRef:
+                    #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+1:]
+                    #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+1:]
+                    #Unwrap the data
+                    DelF[iq, iepsi,:] = DeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
         else:
             figdata = numpy.load('esq_freeEnergies%s.npz'%spacename)
             DelF = figdata['free_energy']
@@ -607,7 +607,6 @@ if __name__=="__main__":
     reldDelF = numpy.abs(dDelF/DelF)
     pdb.set_trace()
  
-
     ################################################
     ################ region ID #####################
     ################################################
