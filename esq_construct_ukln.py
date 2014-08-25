@@ -352,7 +352,7 @@ if __name__=="__main__":
     ##################################################
     ############### END DATA INPUT ###################
     ##################################################
-    #subsampling procedure, optional
+    #DEBUG: subsampling procedure, optional
     manual_subsample = False
     if manual_subsample:
         indicies_list = numpy.zeros([nstates,niterations], numpy.int32) #Maximum memory size
@@ -416,7 +416,6 @@ if __name__=="__main__":
     #(DeltaF_ij, dDeltaF_ij) = comp.mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
     #printFreeEnergy(DeltaF_ij,dDeltaF_ij)
     #Reun from the subsampled data
-    pdb.set_trace()
     maxN = comp.N_k.max()
     if comp.subsample_method == 'per-state':
         for k in xrange(nstates):
@@ -437,8 +436,7 @@ if __name__=="__main__":
         const_q2_matrix = const_q2_matrix[:,comp.retained_indices]
         niterations = len(comp.retained_indices)
     Ref_state = 4 #Reference state of sampling to pull from
-    #if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata): #nand gate
-    pdb.set_trace()
+    #pdb.set_trace()
     if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata) or timekln: #nand gate +timing flag
         #Create numpy arrys: q, epsi, sig
         DelF = numpy.zeros([Nparm, Nparm, Nparm])
@@ -605,7 +603,7 @@ if __name__=="__main__":
     dDelF *= kjpermolTokcal/kjpermolTokT
     #Relative error
     reldDelF = numpy.abs(dDelF/DelF)
-    pdb.set_trace()
+    #pdb.set_trace()
  
     ################################################
     ################ region ID #####################
