@@ -25,12 +25,12 @@ kT = kB*T
 kjpermolTokT = units.kilojoules_per_mole / kT
 kjpermolTokcal = 1/4.184
 graphsfromfile=True #Generate graphs from the .npz arrays
-savedata = False #Save dhdl data
+savedata = True #Save dhdl data
 masked=False
 load_ukln = True
 timekln = False #Timing information
-#subsample_method = 'per-state'
-subsample_method = 'all'
+subsample_method = 'per-state'
+#subsample_method = 'all'
 
 #logspace or linspace
 narg = len(sys.argv)
@@ -46,7 +46,7 @@ else:
 
 #Main output controling vars:
 #nstate options: 24, 32, 40, 49
-nstates = 49
+nstates = 26
 Nparm = 51 #51, 101, or 151
 plotReal = False
 sig_factor=1
@@ -66,8 +66,8 @@ sig_samp_space[0] = sig_min
 sig3_samp_space[0] = sig_samp_space[0]**3
 epsi_min = 0.1 #kJ/mol
 epsi_max = 1.2
-q_min = -3.0
-q_max = +3.0
+q_min = -2.0
+q_max = +2.0
 epsi_samp_space = linspace(epsi_min, epsi_max, 11)
 lamto_epsi = lambda lam: (epsi_max - epsi_min)*lam + epsi_min
 lamto_sig3 = lambda lam: (sig_max**3 - sig_min**3)*lam + sig
@@ -81,27 +81,15 @@ lamto_sig = lambda lam: lamto_sig3(lam)**(1.0/3)
 #                                0           1            2            3            4            5            6            7            8            9   10   11
 sig_samp_space = numpy.array([0.25, 0.57319535, 0.712053172, 0.811158734, 0.890612296, 0.957966253, 1.016984881, 1.069849165, 1.117949319, 1.162232374, 1.2, 0.3])
 epsi_samp_space = numpy.append(epsi_samp_space, 0.8)
-#more                                                    12           13           14           15           16           17           18           19           20           21           22           23
-sig_samp_space  = numpy.append(sig_samp_space, [1.016984881, 1.016984881, 1.016984881, 1.016984881, 1.016984881, 1.016984881, 1.016984881, 1.016984881, 1.016984881, 1.016984881, 1.016984881, 1.016984881])
-epsi_samp_space = numpy.append(epsi_samp_space,[       0.76,        0.76,        0.76,        0.76,        0.76,        0.76,        0.76,        0.76,        0.76,        0.76,        0.76,        0.76])
-#Even more                                              24          25          26          27          28          29          30          31
-sig_samp_space  = numpy.append(sig_samp_space, [0.73518161, 0.64603911, 0.63626708, 1.13315949, 0.65545451, 0.77026625, 0.66490831, 0.87519838])
-epsi_samp_space = numpy.append(epsi_samp_space,[0.56087413, 1.70893940, 2.94070444, 2.28313607, 2.90508252, 0.52984658, 1.64047376,        0.1])
-#MOAR!!!                                                32          33          34          35          36          37          38          39
-sig_samp_space  = numpy.append(sig_samp_space, [0.63122622, 0.69343482, 0.64792833, 1.13099574, 0.84507822, 0.56842670, 0.66070435, 1.14216356])
-epsi_samp_space = numpy.append(epsi_samp_space,[2.90747632, 0.36510159, 1.60992045, 2.27698065, 0.54290845, 0.61327658, 2.54037597, 2.34264248])
-#Ions 40-48                                             40          41          42          43          44          45          46          47          48
-sig_samp_space  = numpy.append(sig_samp_space, [0.64665028, 0.73480072, 0.63877148, 1.13300771, 0.80047188, 0.70852054, 0.69411112, 1.16566948, 1.13144229])
-epsi_samp_space = numpy.append(epsi_samp_space,[1.70926312, 0.55844222, 2.94301283, 2.32384021, 0.54958776, 1.69642936, 2.93903566, 2.58729246, 2.26568506])
+#Ions 12-25                                             12          13          14          15          16          17          18          19          20          21          22          23          24          25
+sig_samp_space  = numpy.append(sig_samp_space, [0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535])
+epsi_samp_space = numpy.append(epsi_samp_space,[      0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21])
+
+
 sig3_samp_space = sig_samp_space**3
-#                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,   12,   13,   14,   15,   16,   17,   18,   19,   20,   21,   22,   23 
-q_samp_space    = numpy.array([  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0, -0.5, -1.0, -1.5, -2.0, -2.5, -3.0, +0.5, +1.0, +1.5, +2.0, +2.5, +3.0])
-#                                                  24,      25,      26,      27,      28,      29,      30,      31
-q_samp_space    = numpy.append(q_samp_space, [-2.0378, -1.9570, -1.9815, -2.2338, +1.7152, +1.7631, +1.7121, -0.5294])
-#                                                  32       33       34       35       36       37       38       39
-q_samp_space    = numpy.append(q_samp_space, [-1.9345, -1.9824, -1.9437, -2.1985,  2.2127,  2.0717,  1.6390,  1.9957])
-#                                                  40       41       42       43      44      45      46      47      48
-q_samp_space    = numpy.append(q_samp_space, [-1.9349, -2.0152, -1.9457, -2.2014, 1.7741, 1.7121, 1.4084, 1.1643, 2.5955])
+
+#                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,      12,      13,      14,      15,      16,      17,      18,      19,      20,      21,      22,      23,      24,      25 
+q_samp_space    = numpy.array([  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0, -2.0000, -1.8516, -1.6903, -1.5119, -1.3093, -1.0690, -0.7559, +2.0000, +1.8516, +1.6903, +1.5119, +1.3093, +1.0690, +0.7559])
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #Real molecule sampling
@@ -349,6 +337,8 @@ if __name__=="__main__":
     del_kln = numpy.abs(u_kln - sanity_kln)
     print "Max Delta: %f" % numpy.max(del_kln)
     rel_del_kln = numpy.abs(del_kln/u_kln)
+    if numpy.max(del_kln) > 2:
+        pdb.set_trace()
     #pdb.set_trace()
     ##################################################
     ############### END DATA INPUT ###################
@@ -443,7 +433,7 @@ if __name__=="__main__":
         const_q2_matrix = const_q2_matrix[:,comp.retained_indices]
         niterations = len(comp.retained_indices)
     Ref_state = 4 #Reference state of sampling to pull from
-    #pdb.set_trace()
+    pdb.set_trace()
     if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata) or timekln: #nand gate +timing flag
         #Create numpy arrys: q, epsi, sig
         DelF = numpy.zeros([Nparm, Nparm, Nparm])
@@ -526,7 +516,7 @@ if __name__=="__main__":
             DelF = numpy.zeros([Nparm, Nparm, Nparm])
             dDelF = numpy.zeros([Nparm, Nparm, Nparm])
             for iq in xrange(Nparm):
-                DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%iEpsi%i.npz' % (spacename, nstates, Nparm, iq, iepsi))
+                DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%.npz' % (spacename, nstates, Nparm, iq))
                 DeltaF_ij = DeltaF_file['DeltaF_ij']
                 dDeltaF_ij = DeltaF_file['dDeltaF_ij']
                 for iepsi in xrange(Nparm):
