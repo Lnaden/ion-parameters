@@ -29,7 +29,8 @@ savedata = False #Save dhdl data
 masked=False
 load_ukln = True
 timekln = False #Timing information
-subsample_method = 'per-state'
+#subsample_method = 'per-state'
+subsample_method = 'all'
 
 #logspace or linspace
 narg = len(sys.argv)
@@ -389,6 +390,8 @@ if __name__=="__main__":
     #Load subsequent f_ki
     f_ki_loaded = False
     state_counter = nstates
+    #pdb.set_trace()
+    #start = time.clock()
     while not f_ki_loaded and state_counter != 0:
         #Load the largest f_ki you can
         try:
@@ -413,6 +416,10 @@ if __name__=="__main__":
         comp = ncdata('complex', '.', u_kln_input=u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True)
     if not f_ki_loaded or f_ki_n != nstates:
         numpy.save('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), comp.mbar.f_k)
+    #end = time.clock()
+    #print "Time passed:"
+    #print end - start
+    #sys.exit(0)
     #(DeltaF_ij, dDeltaF_ij) = comp.mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
     #printFreeEnergy(DeltaF_ij,dDeltaF_ij)
     #Reun from the subsampled data
