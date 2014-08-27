@@ -45,7 +45,7 @@ else:
 
 #Main output controling vars:
 #nstate options: 24, 32, 40, 49
-nstates = 49
+nstates = 26
 Nparm = 51 #51, 101, or 151
 plotReal = False
 sig_factor=1
@@ -482,11 +482,11 @@ if __name__=="__main__":
                     for isig in xrange(Nparm):
                         sig = sig_range[isig]
                         u_kln_sub[:nstates,isig+nstates+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix + flamC6sqrt(epsi,sig)*const_A_matrix + flamC1(q)*const_q_matrix + flamC1(q)**2*const_q2_matrix + const_unaffected_matrix
-                        u_kln_P[:,isig+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix[:,:maxN] + flamC6sqrt(epsi,sig)*const_A_matrix[:,:maxN] + flamC1(q)*const_q_matrix[:,:maxN] + flamC1(q)**2*const_q2_matrix[:,:maxN] + const_unaffected_matrix[:,:maxN]
+                        #u_kln_P[:,isig+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix[:,:maxN] + flamC6sqrt(epsi,sig)*const_A_matrix[:,:maxN] + flamC1(q)*const_q_matrix[:,:maxN] + flamC1(q)**2*const_q2_matrix[:,:maxN] + const_unaffected_matrix[:,:maxN]
                     if not timekln:
                         mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
                         (DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-                        (PDeltaF_ij, PdDeltaF_ij) = comp.mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew')
+                        #(PDeltaF_ij, PdDeltaF_ij) = comp.mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew')
                     if savedata and not timekln:
                         if not os.path.isdir('esq_%s' % spacename):
                             os.makedirs('esq_%s' % spacename) #Create folder
