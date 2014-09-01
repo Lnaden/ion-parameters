@@ -84,12 +84,17 @@ epsi_samp_space = numpy.append(epsi_samp_space, 0.8)
 #Ions 12-25                                             12          13          14          15          16          17          18          19          20          21          22          23          24          25
 sig_samp_space  = numpy.append(sig_samp_space, [0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535])
 epsi_samp_space = numpy.append(epsi_samp_space,[      0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21])
+#Ions 26-28                                             26          27          28
+sig_samp_space  = numpy.append(sig_samp_space, [1.04611987, 1.03181511, 1.06108900])
+epsi_samp_space = numpy.append(epsi_samp_space,[0.98465072, 1.89271088, 2.72821095])
 
 
 sig3_samp_space = sig_samp_space**3
 
 #                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,      12,      13,      14,      15,      16,      17,      18,      19,      20,      21,      22,      23,      24,      25 
 q_samp_space    = numpy.array([  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0, -2.0000, -1.8516, -1.6903, -1.5119, -1.3093, -1.0690, -0.7559, +2.0000, +1.8516, +1.6903, +1.5119, +1.3093, +1.0690, +0.7559])
+#Ions 26-28
+q_samp_space = numpy.append(q_samp_space, [1.0125, -1.4655, 1.0495])
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #Real molecule sampling
@@ -235,6 +240,11 @@ def normalizeData(data):
     return (data - min)/ (max-min)
 
 if __name__=="__main__":
+    #Test numpy's savez_compressed formula
+    try:
+        savez = numpy.savez_compressed
+    except:
+        savez = numpy.savez
     #generate sample length
     #dhdlstart = 34 #Row where data starts
     #dhdlenergy = 1 #column where energy is
@@ -330,7 +340,7 @@ if __name__=="__main__":
                 const_A1_matrix[k,n] = u_kln[k,10,n] - const_R1_matrix[k,n] - const_Un_matrix[k,n]
                 const_A_matrix[k,n] = const_A1_matrix[k,n] - const_A0_matrix[k,n]
         if load_ukln and not os.path.isfile('esq_ukln_consts_n%i.npz'%nstates):
-            numpy.savez('esq_ukln_consts_n%i.npz'%nstates, u_kln=u_kln, const_R_matrix=const_R_matrix, const_A_matrix=const_A_matrix, const_q_matrix=const_q_matrix, const_q2_matrix=const_q2_matrix, const_unaffected_matrix=const_unaffected_matrix)
+                savez('esq_ukln_consts_n%i.npz'%nstates, u_kln=u_kln, const_R_matrix=const_R_matrix, const_A_matrix=const_A_matrix, const_q_matrix=const_q_matrix, const_q2_matrix=const_q2_matrix, const_unaffected_matrix=const_unaffected_matrix)
     #Sanity check
     for l in xrange(nstates):
         sanity_kln[:,l,:] = lamC12[l]*const_R_matrix + lamC6[l]*const_A_matrix + lamC1[l]*const_q_matrix + lamC1[l]**2*const_q2_matrix + const_unaffected_matrix
@@ -402,10 +412,14 @@ if __name__=="__main__":
         #f_ki=numpy.array([0. ,61.20913184 ,71.40827393 ,75.87878531 ,78.40211785 ,79.89587372 ,80.45288761 ,80.28963586 ,79.71483901 ,78.90630752 ,77.90602495 ,0.5571373 ,64.03428624 ,20.01885445 ,-58.8966979 ,-178.11292884 ,-343.48493961 ,-556.63789832 ,70.70837529 ,30.71331917 ,-40.28879673 ,-144.71442394 ,-284.20819285 ,-460.07678445 ,-210.74990763 ,-202.3625391 ,-211.89582577 ,-217.2418002 ,-168.97823733 ,-158.94266495 ,-165.72416028 ,57.79253217 ,-195.03626708 ,-214.19139447 ,-196.65374506 ,-206.69571675 ,-270.11113276 ,-408.83567163 ,-147.95744809 ,-127.26705178 ,-192.96912003 ,-202.04056754 ,-196.08529618 ,-207.33238137 ,-155.20225707 ,-156.03612919 ,-91.06462805 ,3.81078618 ,-279.65874533])
         #comp = ncdata('complex', '.', u_kln_input=u_kln, nequil=0000, save_equil_data=True, manual_subsample=True, compute_mbar=True, verbose=True, mbar_f_ki=f_ki)
         comp = ncdata('complex', '.', u_kln_input=u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True, mbar_f_ki=f_ki)
+        pdb.set_trace()
     except:
         comp = ncdata('complex', '.', u_kln_input=u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True)
     if not f_ki_loaded or f_ki_n != nstates:
-        numpy.save('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), comp.mbar.f_k)
+        try:
+            numpy.save_compressed('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), comp.mbar.f_k)
+        except:
+            numpy.save('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), comp.mbar.f_k)
     #end = time.clock()
     #print "Time passed:"
     #print end - start
@@ -432,8 +446,8 @@ if __name__=="__main__":
         const_q_matrix = const_q_matrix[:,comp.retained_indices]
         const_q2_matrix = const_q2_matrix[:,comp.retained_indices]
         niterations = len(comp.retained_indices)
-    Ref_state = 4 #Reference state of sampling to pull from
-    pdb.set_trace()
+    Ref_state = 1 #Reference state of sampling to pull from
+    #pdb.set_trace()
     if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata) or timekln: #nand gate +timing flag
         #Create numpy arrys: q, epsi, sig
         DelF = numpy.zeros([Nparm, Nparm, Nparm])
@@ -481,11 +495,11 @@ if __name__=="__main__":
                 if not timekln:
                     #mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
                     #(DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-                    (DeltaF_ij, dDeltaF_ij) = comp.mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew')
+                    (DeltaF_ij, dDeltaF_ij) = comp.mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew-kab')
                 if savedata and not timekln:
                     if not os.path.isdir('esq_%s' % spacename):
                         os.makedirs('esq_%s' % spacename) #Create folder
-                    numpy.savez('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
+                        savez('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
             else:
                 DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq))
                 DeltaF_ij = DeltaF_file['DeltaF_ij']
@@ -509,14 +523,14 @@ if __name__=="__main__":
             print "Iteration took %.3f s." % elapsed_time
             print "Estimated completion in %s, at %s (consuming total wall clock time %s)." % (str(datetime.timedelta(seconds=estimated_time_remaining)), time.ctime(estimated_finish_time), str(datetime.timedelta(seconds=estimated_total_time)))
             #Save a copy of just the Nparm**3 matrix in case I dont want to save a large number of files
-            numpy.savez('esq_freeEnergies%s.npz'%spacename, free_energy=DelF, dfree_energy=dDelF)
+            savez('esq_freeEnergies%s.npz'%spacename, free_energy=DelF, dfree_energy=dDelF)
     else:
         #if os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata: #Pull data from 
         if os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata: #Pull data from 
             DelF = numpy.zeros([Nparm, Nparm, Nparm])
             dDelF = numpy.zeros([Nparm, Nparm, Nparm])
             for iq in xrange(Nparm):
-                DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%.npz' % (spacename, nstates, Nparm, iq))
+                DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq))
                 DeltaF_ij = DeltaF_file['DeltaF_ij']
                 dDeltaF_ij = DeltaF_file['dDeltaF_ij']
                 for iepsi in xrange(Nparm):
@@ -608,7 +622,7 @@ if __name__=="__main__":
     '''
     This section will be used to identify where extra sampling should be done. optional flag set at the start of this section
     '''
-    id_regions = False
+    id_regions = True
     if id_regions:
         from scipy import ndimage
         err_threshold = 0.25 #kcal/mol
@@ -663,7 +677,7 @@ if __name__=="__main__":
         #Convert to broader test structure
         num_features = test_num_features
         feature_labels = test_feature_labels
-        resample_tol = 0.29
+        resample_tol = 0.30
         #end!!!
         Nresample = numpy.ones(num_features, dtype=numpy.int32)
         Nsize = numpy.zeros(num_features, dtype=numpy.int32)
@@ -704,7 +718,7 @@ if __name__=="__main__":
     ################# PLOTTING #####################
     ################################################
     #Plot the sigma and epsilon free energies
-    relativeErr = True
+    relativeErr = False
     if relativeErr:
         f,(Fplot,dFplot,rdFplot) = plt.subplots(3,1,sharex=True)
         rdFig = f
