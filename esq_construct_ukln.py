@@ -29,8 +29,9 @@ savedata = True #Save dhdl data
 masked=False
 load_ukln = True
 timekln = False #Timing information
-subsample_method = 'per-state'
+#subsample_method = 'per-state'
 #subsample_method = 'all'
+subsample_method = 'presubsampled'
 
 #logspace or linspace
 narg = len(sys.argv)
@@ -239,6 +240,184 @@ def normalizeData(data):
     max = numpy.max(data)
     return (data - min)/ (max-min)
 
+def find_g_t_states(u_kln, states=None, nequil=None):
+    #Subsample multiple states, this assumes you want to subsample independent of what was fed in
+    if states is None:
+        states = numpy.array(range(nstates))
+    num_sample = len(states)
+    if nequil is None:
+        gen_nequil = True
+        nequil = numpy.zeroes(num_sample, dtype=numpy.int32)
+    else:
+        if len(nequil) != num_sample:
+            print "nequil length needs to be the same as length as states!"
+            raise
+        else:
+            gen_nequl = False
+    g_t = numpy.zeros([num_sample])
+    Neff_max = numpy.zeros([num_sample])
+    for state in states:
+        g_t[state] = timeseries.statisticalInefficiency(u_kln[k,k,nequil[state]:])
+        Neff_max[k] = (u_kln[k,k,:].size + 1) / g_t[state]
+    return g_t, Neff_max
+
+def write_g_t(g_t):
+    from math import ceil
+    ng = len(g_t)
+    gfile = open('g_t.txt','w')
+    for k in xrange(ng):
+        gfile.write('%i\n'% numpy.ceil(g_t[k]))
+    gfile.close()
+
+def subsample_series(series, g_t=None, return_g_t=False):
+    if g_t is None:
+        g_t = timeseries.statisticalInefficiency(series)
+    state_indices = timeseries.subsampleCorrelatedData(series, g = g_t, conservative=True)
+    N_k = len(state_indices)
+    transfer_series = series[state_indices]
+    if return_g_t:
+        return state_indices, transfer_series, g_t
+    else:
+        return state_indices, transfer_series
+
+
+class consts(object): #Class to house all constant information
+
+    def _convertunits(self, converter):
+        self.const_unaffected_matrix *= converter
+        self.const_R_matrix *= converter
+        self.const_A_matrix *= converter
+        self.const_q_matrix *= converter
+        self.const_q2_matrix *= converter
+        self.u_kln *= converter
+        try:
+            self.const_A0_matrix *= converter
+            self.const_A1_matrix *= converter
+            self.const_R0_matrix *= converter
+            self.const_R1_matrix *= converter
+            self.const_Un_matrix *= converter
+        except:
+            pass
+        return
+    def dimless(self):
+        if self.units:
+            self._convertunits(kjpermolTokT)
+            self.units = False
+    def kjunits(self):
+        if not self.units:
+            self._convertunits(1.0/kjpermolTokT)
+            self.units = True
+
+    def save_consts(self, filename):
+        savez(filename, u_kln=self.u_kln, const_R_matrix=self.const_R_matrix, const_A_matrix=self.const_A_matrix, const_q_matrix=self.const_q_matrix, const_q2_matrix=self.const_q2_matrix, const_unaffected_matrix=self.const_unaffected_matrix)
+    
+    def determine_N_k(self, series):
+        npoints = len(series)
+        #Go backwards to speed up process
+        N_k = npoints
+        for i in xrange(npoints,0,-1):
+            if not numpy.allclose(series[N_k-1:], numpy.zeros(len(series[N_k-1:]))):
+                break
+            else:
+                N_k += -1
+        return N_k
+
+    def determine_all_N_k(self, force=False):
+        if self.Nkset and not force:
+            print "N_k is already set! Use the 'force' flag to manually set it"
+            return
+        self.N_k = numpy.zeros(self.nstates, dtype=numpy.int32)
+        for k in xrange(self.nstates):
+            self.N_k[k] = self.determine_N_k(self.u_kln[k,k,:])
+        self.Nkset = True
+        return
+
+    def updateiter(self, iter):
+        if iter > self.itermax:
+            self.itermax = iter
+    @property #Set the property of itermax which will also update the matricies in place
+    def itermax(self):
+        return self._itermax
+    @itermax.setter #Whenever itermax is updated, the resize should be cast
+    def itermax(self, iter):
+        if iter > self.itermax:
+            ukln_xfer = numpy.zeros([self.nstates, self.nstates, iter])
+            unaffected_xfer = numpy.zeros([self.nstates, iter])
+            un_xfer = numpy.zeros([self.nstates, iter])
+            r0_xfer = numpy.zeros([self.nstates, iter])
+            r1_xfer = numpy.zeros([self.nstates, iter])
+            r_xfer = numpy.zeros([self.nstates, iter])
+            a0_xfer = numpy.zeros([self.nstates, iter])
+            a1_xfer = numpy.zeros([self.nstates, iter])
+            a_xfer = numpy.zeros([self.nstates, iter])
+            q_xfer = numpy.zeros([self.nstates, iter])
+            q2_xfer = numpy.zeros([self.nstates, iter])
+            #Transfer data
+            unaffected_xfer[:,:self.itermax] = self.const_unaffected_matrix
+            un_xfer[:,:self.itermax] = self.const_Un_matrix
+            a_xfer[:,:self.itermax] = self.const_A_matrix
+            r_xfer[:,:self.itermax] = self.const_R_matrix
+            q_xfer[:,:self.itermax] = self.const_q_matrix
+            q2_xfer[:,:self.itermax] = self.const_q2_matrix
+            ukln_xfer[:,:,:self.itermax] = self.u_kln
+            self.const_unaffected_matrix = unaffected_xfer
+            self.const_R_matrix = r_xfer
+            self.const_A_matrix = a_xfer
+            self.const_q_matrix = q_xfer
+            self.const_q2_matrix = q2_xfer
+            self.const_Un_matrix = un_xfer
+            self.u_kln = ukln_xfer
+            try:
+                a0_xfer[:,:self.itermax] = self.const_A0_matrix
+                a1_xfer[:,:self.itermax] = self.const_A1_matrix
+                r0_xfer[:,:self.itermax] = self.const_R0_matrix
+                r1_xfer[:,:self.itermax] = self.const_R1_matrix
+                self.const_A0_matrix = a0_xfer
+                self.const_A1_matrix = a1_xfer
+                self.const_R0_matrix = r0_xfer
+                self.const_R1_matrix = r1_xfer
+            except:
+                pass
+            self.shape = self.u_kln.shape
+        self._itermax = iter
+
+    def __init__(self, file=None, nstates=nstates, itermax=1):
+        loaded = False
+        self._itermax=itermax
+        self.nstates=nstates
+        self.Nkset = False
+        if file is not None:
+            try:
+                ukln_file = numpy.load(file)
+                self.u_kln = ukln_file['u_kln']
+                self.const_R_matrix = ukln_file['const_R_matrix'] 
+                self.const_A_matrix = ukln_file['const_A_matrix'] 
+                self.const_unaffected_matrix = ukln_file['const_unaffected_matrix']
+                self.const_q_matrix = ukln_file['const_q_matrix']
+                self.const_q2_matrix = ukln_file['const_q2_matrix']
+                self._itermax = self.u_kln.shape[2]
+                self.determine_all_N_k()
+                self.Nkset = True
+                loaded = True
+            except: 
+                pass
+        if not loaded:
+            self.const_unaffected_matrix = numpy.zeros([self.nstates,self.itermax])
+            self.const_Un_matrix = numpy.zeros([self.nstates,self.itermax])
+            self.const_R0_matrix = numpy.zeros([self.nstates,self.itermax])
+            self.const_R1_matrix = numpy.zeros([self.nstates,self.itermax])
+            self.const_R_matrix = numpy.zeros([self.nstates,self.itermax])
+            self.const_A0_matrix = numpy.zeros([self.nstates,self.itermax])
+            self.const_A1_matrix = numpy.zeros([self.nstates,self.itermax])
+            self.const_A_matrix = numpy.zeros([self.nstates,self.itermax])
+            self.const_q_matrix = numpy.zeros([self.nstates,self.itermax])
+            self.const_q2_matrix = numpy.zeros([self.nstates,self.itermax])
+            self.u_kln = numpy.zeros([self.nstates,self.nstates,self.itermax])
+            self.itermax = itermax
+            self.N_k = numpy.ones(self.nstates) * self.itermax
+        self.shape = self.u_kln.shape
+        self.units = True
+
 if __name__=="__main__":
     #Test numpy's savez_compressed formula
     try:
@@ -271,112 +450,129 @@ if __name__=="__main__":
     lamC6 = flamC6sqrt(epsi_samp_space, sig_samp_space)
     lamC1 = flamC1(q_samp_space)
     #Try to load u_kln
-    sanity_kln = numpy.zeros([nstates,nstates,niterations])
     lam_range = linspace(0,1,nstates)
+    subsampled = numpy.zeros([nstates],dtype=numpy.bool)
     if load_ukln and os.path.isfile('esq_ukln_consts_n%i.npz'%nstates):
-        ukln_consts = numpy.load('esq_ukln_consts_n%i.npz'%nstates)
-        u_kln = ukln_consts['u_kln']
-        const_R_matrix = ukln_consts['const_R_matrix'] 
-        const_A_matrix = ukln_consts['const_A_matrix'] 
-        const_unaffected_matrix = ukln_consts['const_unaffected_matrix']
-        const_q_matrix = ukln_consts['const_q_matrix']
-        const_q2_matrix = ukln_consts['const_q2_matrix']
+        energies = consts(file='esq_ukln_consts_n%i.npz'%nstates)
+        #ukln_consts = numpy.load('esq_ukln_consts_n%i.npz'%nstates)
+        #u_kln = ukln_consts['u_kln']
+        #const_R_matrix = ukln_consts['const_R_matrix'] 
+        #const_A_matrix = ukln_consts['const_A_matrix'] 
+        #const_unaffected_matrix = ukln_consts['const_unaffected_matrix']
+        #const_q_matrix = ukln_consts['const_q_matrix']
+        #const_q2_matrix = ukln_consts['const_q2_matrix']
     else:
         #Initial u_kln
-        u_kln = numpy.zeros([nstates,nstates,niterations])
-        
-        const_unaffected_matrix = numpy.zeros([nstates,niterations])
-        const_Un_matrix = numpy.zeros([nstates,niterations])
-        const_R0_matrix = numpy.zeros([nstates,niterations])
-        const_R1_matrix = numpy.zeros([nstates,niterations])
-        const_R_matrix = numpy.zeros([nstates,niterations])
-        const_A0_matrix = numpy.zeros([nstates,niterations])
-        const_A1_matrix = numpy.zeros([nstates,niterations])
-        const_A_matrix = numpy.zeros([nstates,niterations])
-        const_q_matrix = numpy.zeros([nstates,niterations])
-        const_q2_matrix = numpy.zeros([nstates,niterations])
-        #Read in the data for the unaffected state
+        energies = consts()
+        g_t = numpy.zeros([nstates])
+        #u_kln = numpy.zeros([nstates,nstates,niterations])
+        #const_unaffected_matrix = numpy.zeros([nstates,niterations])
+        #const_Un_matrix = numpy.zeros([nstates,niterations])
+        #const_R0_matrix = numpy.zeros([nstates,niterations])
+        #const_R1_matrix = numpy.zeros([nstates,niterations])
+        #const_R_matrix = numpy.zeros([nstates,niterations])
+        #const_A0_matrix = numpy.zeros([nstates,niterations])
+        #const_A1_matrix = numpy.zeros([nstates,niterations])
+        #const_A_matrix = numpy.zeros([nstates,niterations])
+        #const_q_matrix = numpy.zeros([nstates,niterations])
+        #const_q2_matrix = numpy.zeros([nstates,niterations])
+        #Read in the data
         for k in xrange(nstates):
             print "Importing LJ = %02i" % k
             energy_dic = {'full':{}, 'rep':{}}
-            energy_dic['null'] = open('lj%s/prod/energy%s_null.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the null energies (unaffected) of the K states
-            for l in xrange(nstates):
-                energy_dic['full']['%s'%l] = open('lj%s/prod/energy%s_%s.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the full energies for each state at KxL
-                if l == 10 or l == 0:
-                    energy_dic['rep']['%s'%l] = open('lj%s/prod/energy%s_%s_rep.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the repulsive energies at 0, nstates-1, and K
-            energy_dic['q']  =  open('lj%s/prod/energy%s_q.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
-            energy_dic['q2']  =  open('lj%s/prod/energy%s_q2.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
+            #Try to load the sub filenames
+            try:
+                energy_dic['null'] = open('lj%s/prod/subenergy%s_null.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the null energies (unaffected) of the K states
+                for l in xrange(nstates):
+                    energy_dic['full']['%s'%l] = open('lj%s/prod/subenergy%s_%s.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the full energies for each state at KxL
+                    if l == 10 or l == 0:
+                        energy_dic['rep']['%s'%l] = open('lj%s/prod/subenergy%s_%s_rep.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the repulsive energies at 0, nstates-1, and K
+                energy_dic['q']  =  open('lj%s/prod/subenergy%s_q.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
+                energy_dic['q2']  =  open('lj%s/prod/subenergy%s_q2.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
+                iter = len(energy_dic['null'])
+                subsampled[k] = True
+                # Set the object to iterate over, since we want every frame of the subsampled proces, we just use every frame
+                frames = xrange(iter)
+            except: #Load the normal way
+                energy_dic['null'] = open('lj%s/prod/energy%s_null.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the null energies (unaffected) of the K states
+                for l in xrange(nstates):
+                    energy_dic['full']['%s'%l] = open('lj%s/prod/energy%s_%s.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the full energies for each state at KxL
+                    if l == 10 or l == 0:
+                        energy_dic['rep']['%s'%l] = open('lj%s/prod/energy%s_%s_rep.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the repulsive energies at 0, nstates-1, and K
+                energy_dic['q']  =  open('lj%s/prod/energy%s_q.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
+                energy_dic['q2']  =  open('lj%s/prod/energy%s_q2.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
+                iter = niterations
+                #Subsample
+                tempenergy = numpy.zeros(iter)
+                for frame in xrange(iter):
+                    tempenergy[frame] = float(energy_dic['full']['%s'%k][frame].split()[g_en_energy])
+                frames, temp_series, g_t[k] = subsample_series(tempenergy, return_g_t=True)
+                print "State %i has g_t of %i" % (k, g_t[k])
+                iter = len(frames)
+            #Update iterations if need be
+            energies.updateiter(iter)
             #Fill in matricies
-            for n in xrange(niterations):
+            n = 0
+            for frame in frames:
                 #Unaffected state
-                const_Un_matrix[k,n] = float(energy_dic['null'][n].split()[g_en_energy])
+                energies.const_Un_matrix[k,n] = float(energy_dic['null'][frame].split()[g_en_energy])
                 #Charge only state
-                VI = float(energy_dic['q'][n].split()[g_en_energy]) - const_Un_matrix[k,n]
-                VII = float(energy_dic['q2'][n].split()[g_en_energy]) - const_Un_matrix[k,n]
+                VI = float(energy_dic['q'][frame].split()[g_en_energy]) - energies.const_Un_matrix[k,n]
+                VII = float(energy_dic['q2'][frame].split()[g_en_energy]) - energies.const_Un_matrix[k,n]
                 q1 = 1
                 q2 = 0.5
                 QB = (q1**2*VII - q2**2*VI)/(q1**2*q2 - q2**2*q1)
                 QA = (VI - q1*QB)/q1**2
-                const_q_matrix[k,n] = QB
-                const_q2_matrix[k,n] = QA
+                energies.const_q_matrix[k,n] = QB
+                energies.const_q2_matrix[k,n] = QA
                 #const_q_matrix[k,n] = float(energy_dic['q'][n].split()[g_en_energy]) - const_Un_matrix[k,n]
                 #Isolate the data
                 for l in xrange(nstates):
-                    u_kln[k,l,n] = float(energy_dic['full']['%s'%l][n].split()[g_en_energy]) #extract the kln energy, get the line, split the line, get the energy, convert to float, store
+                    energies.u_kln[k,l,n] = float(energy_dic['full']['%s'%l][frame].split()[g_en_energy]) #extract the kln energy, get the line, split the line, get the energy, convert to float, store
                 #Repulsive terms: 
                 #R0 = U_rep[k,k,n] + dhdl[k,0,n] - Un[k,n]
-                const_R0_matrix[k,n] = float(energy_dic['rep']['%s'%(0)][n].split()[g_en_energy]) - const_Un_matrix[k,n]
+                energies.const_R0_matrix[k,n] = float(energy_dic['rep']['%s'%(0)][frame].split()[g_en_energy]) - energies.const_Un_matrix[k,n]
                 #R1 = U_rep[k,k,n] + dhdl[k,-1,n] - Un[k,n]
-                const_R1_matrix[k,n] = float(energy_dic['rep']['%s'%(10)][n].split()[g_en_energy]) - const_Un_matrix[k,n]
-                const_R_matrix[k,n] = const_R1_matrix[k,n] - const_R0_matrix[k,n]
+                energies.const_R1_matrix[k,n] = float(energy_dic['rep']['%s'%(10)][frame].split()[g_en_energy]) - energies.const_Un_matrix[k,n]
+                energies.const_R_matrix[k,n] = energies.const_R1_matrix[k,n] - energies.const_R0_matrix[k,n]
                 #Finish the total unaffected term
                 #Total unaffected = const_Un + U0 = const_Un + (U_full[k,0,n] - const_Un) = U_full[k,0,n]
-                const_unaffected_matrix[k,n] = u_kln[k,0,n]
+                energies.const_unaffected_matrix[k,n] = energies.u_kln[k,0,n]
                 #Fill in the q matrix
                 
                 #Attractive term
                 #u_A = U_full[k,n] - constR[k,n] - const_unaffected[k,n]
-                const_A0_matrix[k,n] = u_kln[k,0,n] - const_R0_matrix[k,n] - const_Un_matrix[k,n]
-                const_A1_matrix[k,n] = u_kln[k,10,n] - const_R1_matrix[k,n] - const_Un_matrix[k,n]
-                const_A_matrix[k,n] = const_A1_matrix[k,n] - const_A0_matrix[k,n]
-        if load_ukln and not os.path.isfile('esq_ukln_consts_n%i.npz'%nstates):
-                savez('esq_ukln_consts_n%i.npz'%nstates, u_kln=u_kln, const_R_matrix=const_R_matrix, const_A_matrix=const_A_matrix, const_q_matrix=const_q_matrix, const_q2_matrix=const_q2_matrix, const_unaffected_matrix=const_unaffected_matrix)
+                energies.const_A0_matrix[k,n] = energies.u_kln[k,0,n] - energies.const_R0_matrix[k,n] - energies.const_Un_matrix[k,n]
+                energies.const_A1_matrix[k,n] = energies.u_kln[k,10,n] - energies.const_R1_matrix[k,n] - energies.const_Un_matrix[k,n]
+                energies.const_A_matrix[k,n] = energies.const_A1_matrix[k,n] - energies.const_A0_matrix[k,n]
+                n += 1
+        energies.determine_all_N_k()
+        #write_g_t(g_t)
+        constname = 'esq_ukln_consts_n%i.npz'%nstates
+        if load_ukln and not os.path.isfile(constname):
+            energies.save_consts(constname)
     #Sanity check
+    sanity_kln = numpy.zeros(energies.u_kln.shape)
     for l in xrange(nstates):
-        sanity_kln[:,l,:] = lamC12[l]*const_R_matrix + lamC6[l]*const_A_matrix + lamC1[l]*const_q_matrix + lamC1[l]**2*const_q2_matrix + const_unaffected_matrix
-    del_kln = numpy.abs(u_kln - sanity_kln)
-    print "Max Delta: %f" % numpy.max(del_kln)
-    rel_del_kln = numpy.abs(del_kln/u_kln)
-    if numpy.max(del_kln) > 2:
+        sanity_kln[:,l,:] = lamC12[l]*energies.const_R_matrix + lamC6[l]*energies.const_A_matrix + lamC1[l]*energies.const_q_matrix + lamC1[l]**2*energies.const_q2_matrix + energies.const_unaffected_matrix
+    del_kln = numpy.abs(energies.u_kln - sanity_kln)
+    print "Max Delta: %f" % numpy.nanmax(del_kln)
+    rel_del_kln = numpy.abs(del_kln/energies.u_kln)
+    if numpy.nanmax(del_kln) > 2:
         pdb.set_trace()
     #pdb.set_trace()
     ##################################################
     ############### END DATA INPUT ###################
     ##################################################
-    #DEBUG: subsampling procedure, optional
-    manual_subsample = False
-    if manual_subsample:
-        indicies_list = numpy.zeros([nstates,niterations], numpy.int32) #Maximum memory size
-        N_k_sub = numpy.zeros([nstates], numpy.int32)
-        for k in xrange(nstates):
-            subsample = timeseries.subsampleCorrelatedData(u_kln[k,k,500:], verbose=False)
-            N_k_sub[k] = len(subsample)
-            indicies_list[k,:N_k_sub[k]] = subsample
-            for l in xrange(nstates):
-                u_kln[k,l,:N_k_sub[k]] = u_kln[k,l,subsample]
-        Ntotal = N_k_sub.sum()
-        print "Ntotal: = %i" % Ntotal
-        mbar = MBAR(u_kln*kjpermolTokT, N_k_sub, verbose = True, method = 'adaptive')
-        (DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-        pdb.set_trace()
-    #Create master uklns
+   #Create master uklns
     #Convert to dimless
-    u_kln = u_kln * kjpermolTokT 
-    const_R_matrix = const_R_matrix * kjpermolTokT 
-    const_A_matrix = const_A_matrix * kjpermolTokT 
-    const_unaffected_matrix = const_unaffected_matrix * kjpermolTokT
-    const_q_matrix *= kjpermolTokT
-    const_q2_matrix *= kjpermolTokT
+    energies.dimless()
+    #u_kln = u_kln * kjpermolTokT 
+    #const_R_matrix = const_R_matrix * kjpermolTokT 
+    #const_A_matrix = const_A_matrix * kjpermolTokT 
+    #const_unaffected_matrix = const_unaffected_matrix * kjpermolTokT
+    #const_q_matrix *= kjpermolTokT
+    #const_q2_matrix *= kjpermolTokT
     includeRef = False
     if includeRef:
         offset=1
@@ -411,10 +607,10 @@ if __name__=="__main__":
         f_ki[:draw_ki] = f_ki_load[:draw_ki]
         #f_ki=numpy.array([0. ,61.20913184 ,71.40827393 ,75.87878531 ,78.40211785 ,79.89587372 ,80.45288761 ,80.28963586 ,79.71483901 ,78.90630752 ,77.90602495 ,0.5571373 ,64.03428624 ,20.01885445 ,-58.8966979 ,-178.11292884 ,-343.48493961 ,-556.63789832 ,70.70837529 ,30.71331917 ,-40.28879673 ,-144.71442394 ,-284.20819285 ,-460.07678445 ,-210.74990763 ,-202.3625391 ,-211.89582577 ,-217.2418002 ,-168.97823733 ,-158.94266495 ,-165.72416028 ,57.79253217 ,-195.03626708 ,-214.19139447 ,-196.65374506 ,-206.69571675 ,-270.11113276 ,-408.83567163 ,-147.95744809 ,-127.26705178 ,-192.96912003 ,-202.04056754 ,-196.08529618 ,-207.33238137 ,-155.20225707 ,-156.03612919 ,-91.06462805 ,3.81078618 ,-279.65874533])
         #comp = ncdata('complex', '.', u_kln_input=u_kln, nequil=0000, save_equil_data=True, manual_subsample=True, compute_mbar=True, verbose=True, mbar_f_ki=f_ki)
-        comp = ncdata('complex', '.', u_kln_input=u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True, mbar_f_ki=f_ki)
-        pdb.set_trace()
+        comp = ncdata('complex', '.', u_kln_input=energies.u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True, mbar_f_ki=f_ki)
+        #pdb.set_trace()
     except:
-        comp = ncdata('complex', '.', u_kln_input=u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True)
+        comp = ncdata('complex', '.', u_kln_input=energies.u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True)
     if not f_ki_loaded or f_ki_n != nstates:
         try:
             numpy.save_compressed('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), comp.mbar.f_k)
@@ -428,24 +624,24 @@ if __name__=="__main__":
     #printFreeEnergy(DeltaF_ij,dDeltaF_ij)
     #Reun from the subsampled data
     maxN = comp.N_k.max()
-    if comp.subsample_method == 'per-state':
-        for k in xrange(nstates):
-            ndxs = comp.retained_indices[k, :comp.N_k[k]]
-            Nndxs = len(ndxs)
-            u_kln[k,:,:Nndxs] = u_kln[k,:,ndxs].T
-            const_R_matrix[k,:Nndxs] = const_R_matrix[k,ndxs].T
-            const_A_matrix[k,:Nndxs] = const_A_matrix[k,ndxs].T
-            const_unaffected_matrix[k,:Nndxs] = const_unaffected_matrix[k,ndxs].T
-            const_q_matrix[k,:Nndxs] = const_q_matrix[k,ndxs].T
-            const_q2_matrix[k,:Nndxs] = const_q2_matrix[k,ndxs].T
-    else:
-        u_kln = u_kln[:,:,comp.retained_indices]
-        const_R_matrix = const_R_matrix[:,comp.retained_indices]
-        const_A_matrix = const_A_matrix[:,comp.retained_indices]
-        const_unaffected_matrix = const_unaffected_matrix[:,comp.retained_indices]
-        const_q_matrix = const_q_matrix[:,comp.retained_indices]
-        const_q2_matrix = const_q2_matrix[:,comp.retained_indices]
-        niterations = len(comp.retained_indices)
+    #if comp.subsample_method == 'per-state':
+    #    for k in xrange(nstates):
+    #        ndxs = comp.retained_indices[k, :comp.N_k[k]]
+    #        Nndxs = len(ndxs)
+    #        u_kln[k,:,:Nndxs] = u_kln[k,:,ndxs].T
+    #        const_R_matrix[k,:Nndxs] = const_R_matrix[k,ndxs].T
+    #        const_A_matrix[k,:Nndxs] = const_A_matrix[k,ndxs].T
+    #        const_unaffected_matrix[k,:Nndxs] = const_unaffected_matrix[k,ndxs].T
+    #        const_q_matrix[k,:Nndxs] = const_q_matrix[k,ndxs].T
+    #        const_q2_matrix[k,:Nndxs] = const_q2_matrix[k,ndxs].T
+    #else:
+    #    u_kln = u_kln[:,:,comp.retained_indices]
+    #    const_R_matrix = const_R_matrix[:,comp.retained_indices]
+    #    const_A_matrix = const_A_matrix[:,comp.retained_indices]
+    #    const_unaffected_matrix = const_unaffected_matrix[:,comp.retained_indices]
+    #    const_q_matrix = const_q_matrix[:,comp.retained_indices]
+    #    const_q2_matrix = const_q2_matrix[:,comp.retained_indices]
+    #    niterations = len(comp.retained_indices)
     Ref_state = 1 #Reference state of sampling to pull from
     #pdb.set_trace()
     if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata) or timekln: #nand gate +timing flag
@@ -491,7 +687,8 @@ if __name__=="__main__":
                         sig = sig_range[isig]
                         lndx = isig + (iepsi*Nparm)
                         #u_kln_sub[:nstates,isig+nstates+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix + flamC6sqrt(epsi,sig)*const_A_matrix + flamC1(q)*const_q_matrix + flamC1(q)**2*const_q2_matrix + const_unaffected_matrix
-                        u_kln_P[:,lndx+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix[:,:maxN] + flamC6sqrt(epsi,sig)*const_A_matrix[:,:maxN] + flamC1(q)*const_q_matrix[:,:maxN] + flamC1(q)**2*const_q2_matrix[:,:maxN] + const_unaffected_matrix[:,:maxN]
+                        #u_kln_P[:,lndx+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix[:,:maxN] + flamC6sqrt(epsi,sig)*const_A_matrix[:,:maxN] + flamC1(q)*const_q_matrix[:,:maxN] + flamC1(q)**2*const_q2_matrix[:,:maxN] + const_unaffected_matrix[:,:maxN]
+                        u_kln_P[:,lndx+offset,:] = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
                 if not timekln:
                     #mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
                     #(DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
@@ -549,33 +746,33 @@ if __name__=="__main__":
     ####### START SPECIFIC FREE ENERGY CALC #######
     ###############################################
     #Mapping is for UAmethane, NEoPentane, and C60 in that order
-    realname = ['UAm', 'NOP', 'C60', 'LJ6', 'null', 'LJ11']
-    nreal = len(realname)
-    realepsi = numpy.array([1.2301, 3.4941, 1.0372, 0.7600, 0, 0.8])
-    realsig  = numpy.array([0.3730, 0.6150, 0.9452, 1.0170, 0, 0.3])
-    anrealepsi = numpy.array([1.2301, 3.4941, 1.0372, 0.7600])
-    anrealsig  = numpy.array([0.3730, 0.6150, 0.9452, 1.0170])
-    u_kln_sub = numpy.zeros([nstates+nreal,nstates+nreal,niterations])
-    u_kln_sub[:nstates,:nstates,:] = u_kln
-    f_k = comp.mbar.f_k
-    f_k_sub = numpy.zeros(nstates+nreal)
-    f_k_sub[:nstates] = f_k
-    N_k = comp.mbar.N_k
-    N_k_sub = numpy.zeros(nstates+nreal, numpy.int32)
-    N_k_sub[:nstates] = N_k
-    for imol in xrange(nreal):
-        #Save data files
-        epsi = realepsi[imol]
-        sig = realsig[imol]
-        #Create Sub matrix
-        u_kln_sub[:nstates,imol+nstates+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix + flamC6sqrt(epsi,sig)*const_A_matrix + const_unaffected_matrix
-    #mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
-    #(realDeltaF_ij, realdDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-    #printFreeEnergy(realDeltaF_ij,realdDeltaF_ij)
+    #realname = ['UAm', 'NOP', 'C60', 'LJ6', 'null', 'LJ11']
+    #nreal = len(realname)
+    #realepsi = numpy.array([1.2301, 3.4941, 1.0372, 0.7600, 0, 0.8])
+    #realsig  = numpy.array([0.3730, 0.6150, 0.9452, 1.0170, 0, 0.3])
+    #anrealepsi = numpy.array([1.2301, 3.4941, 1.0372, 0.7600])
+    #anrealsig  = numpy.array([0.3730, 0.6150, 0.9452, 1.0170])
+    #u_kln_sub = numpy.zeros([nstates+nreal,nstates+nreal,niterations])
+    #u_kln_sub[:nstates,:nstates,:] = u_kln
+    #f_k = comp.mbar.f_k
+    #f_k_sub = numpy.zeros(nstates+nreal)
+    #f_k_sub[:nstates] = f_k
+    #N_k = comp.mbar.N_k
+    #N_k_sub = numpy.zeros(nstates+nreal, numpy.int32)
+    #N_k_sub[:nstates] = N_k
     #for imol in xrange(nreal):
-    #    print "Free energy of %s relative to LJ6: %.3f +- %.3f with %i states" % (realname[imol], realDeltaF_ij[Ref_state,nstates+imol], realdDeltaF_ij[Ref_state,nstates+imol], nstates)
-    print realepsi
-    print realsig
+    #    #Save data files
+    #    epsi = realepsi[imol]
+    #    sig = realsig[imol]
+    #    #Create Sub matrix
+    #    u_kln_sub[:nstates,imol+nstates+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix + flamC6sqrt(epsi,sig)*const_A_matrix + const_unaffected_matrix
+    ##mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
+    ##(realDeltaF_ij, realdDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
+    ##printFreeEnergy(realDeltaF_ij,realdDeltaF_ij)
+    ##for imol in xrange(nreal):
+    ##    print "Free energy of %s relative to LJ6: %.3f +- %.3f with %i states" % (realname[imol], realDeltaF_ij[Ref_state,nstates+imol], realdDeltaF_ij[Ref_state,nstates+imol], nstates)
+    #print realepsi
+    #print realsig
     ###############################################
     ######### END FREE ENERGY CALCULATIONS ########
     ###############################################
