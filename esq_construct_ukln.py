@@ -876,17 +876,40 @@ if __name__=="__main__":
         feature_labels = test_feature_labels
         resample_tol = 0.30
         #end!!!
-        Nresample = numpy.ones(num_features, dtype=numpy.int32)
+        Nresample = numpy.zeros(num_features, dtype=numpy.int32)
         Nsize = numpy.zeros(num_features, dtype=numpy.int32)
         for i in range(num_features):
             index = i + 1 #Convert to index
             Nsize[i] = numpy.where(feature_labels == index)[0].shape[0]
+        #Points will be distributed with the following rules:
+        # The pecent of points from each feature will be identified
+        # There will be a finite number of points to add per distribution (10)
+        # Pecrent of points in each feature will be converted to decipercent 34% = 3.4 deci%
+        # Starting with the largest cluster (highest %) then in decending order, alternate celing and floor with deci%
+        # The celing/floor will be the # of points distributed to that cluster
+        # Points will be distriubed until we run out!
         ndistrib = 10 # Number of poitns to distribute
         percentSize = Nsize/float(Nsize.sum()) #Generate percentages
         deciPercents = percentSize * 10 #Convert to deciPercent (e.g. 0.34 = 34% = 3.4 deci%)
         sortedNdxMaxMin = numpy.argsort(decipercents)[::-1] #Figure out which has the max
-        Nresample[Nsize/float(Nsize.sum()) > resample_tol] = 3 #Resample at > 30% of the total points
-        Nresamp_total = Nresample.sum()
+        updown = numpy.ceil
+        pointsleft = ndistrib
+        for index in sortedNdxMaxMin:
+            pointsToGive = updown(deciPercents[index])
+            if pointsToGive <= pointsleft:
+                Nresample[index] = pointsToGive
+                pointsleft -= pointsToGive
+            elif pointsToGive > pointsleft and pointsleft != 0:
+                Nresample[index] = pointsleft
+                pointsleft -= pointsleft
+            else:
+                Nresample[index] = 0
+            if updown is numpy.ceil:
+                updown = numpy.floor
+            else:
+               updown = numpy.ceil 
+        #Nresample[Nsize/float(Nsize.sum()) > resample_tol] = 3 #Resample at > 30% of the total points
+        #Nresamp_total = Nresample.sum()
         resamp_points = numpy.zeros([Nresample.sum(), 3])
         closest_interiors = numpy.zeros(resamp_points.shape)
         #Tesalate over where multiple samples are needed based on k-clustering Lloyd's algorithm
@@ -894,7 +917,8 @@ if __name__=="__main__":
         resamp_counter = 0
         for i in xrange(num_features):
             index = i + 1 #Convert to index
-            if Nresample[i] > 1:
+            #if Nresample[i] > 1:
+            if Nresample[i] > 0:
                 feature_indices = numpy.transpose(numpy.array(numpy.where(feature_labels==index))) #Creates a NxD matrix where N=feature.size
                 #feature_indices = numpy.where(feature_labels==i)
                 mu, clusters = find_centers(feature_indices, Nresample[i], dDelF)
@@ -904,11 +928,11 @@ if __name__=="__main__":
                     resamp_points[resamp_counter,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
                     resamp_points[resamp_counter,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
                     resamp_counter += 1
-                    closest_interiors = closest_index(mu[n], feature_labels, i)
-            else:
+                    #closest_interiors = closest_index(mu[n], feature_labels, i)
+            #else:
                 #Comment out to ignore these for weaker features
-                resamp_points[resamp_counter,:] = coms_esq[i,:]
-                resamp_counter += 1
+                #resamp_points[resamp_counter,:] = coms_esq[i,:]
+                #resamp_counter += 1
                 
         pdb.set_trace()
         #Test: set the dDelF where there are not features to 0
