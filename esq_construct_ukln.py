@@ -696,7 +696,7 @@ if __name__=="__main__":
                 if savedata and not timekln:
                     if not os.path.isdir('esq_%s' % spacename):
                         os.makedirs('esq_%s' % spacename) #Create folder
-                        savez('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
+                    savez('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
             else:
                 DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq))
                 DeltaF_ij = DeltaF_file['DeltaF_ij']
@@ -881,7 +881,10 @@ if __name__=="__main__":
         for i in range(num_features):
             index = i + 1 #Convert to index
             Nsize[i] = numpy.where(feature_labels == index)[0].shape[0]
-        #Nresample[Nsize == Nsize.max()] = 3
+        ndistrib = 10 # Number of poitns to distribute
+        percentSize = Nsize/float(Nsize.sum()) #Generate percentages
+        deciPercents = percentSize * 10 #Convert to deciPercent (e.g. 0.34 = 34% = 3.4 deci%)
+        sortedNdxMaxMin = numpy.argsort(decipercents)[::-1] #Figure out which has the max
         Nresample[Nsize/float(Nsize.sum()) > resample_tol] = 3 #Resample at > 30% of the total points
         Nresamp_total = Nresample.sum()
         resamp_points = numpy.zeros([Nresample.sum(), 3])
