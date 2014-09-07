@@ -13,6 +13,7 @@ from pymbar import MBAR
 from numpy import linalg
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable as mal
+from matplotlib import ticker
 import time
 import datetime
 import sys
@@ -42,7 +43,7 @@ else:
 #Main output controling vars:
 nstates = 12
 Nparm = 151 #101 or 151
-plotReal = False
+plotReal = True
 sig_factor=1
 annotatefig = True
 savefigs = True
@@ -106,9 +107,9 @@ elif spacing is linspace:
 
 
 ################ SUBROUTINES ##################
-def my_annotate(ax, s, xy_arr=[], *args, **kwargs):
+def my_annotate(ax, s, xy_arr=[], fontsize=12, *args, **kwargs):
   ans = []
-  an = ax.annotate(s, xy_arr[0], *args, **kwargs)
+  an = ax.annotate(s, xy_arr[0], fontsize=fontsize, *args, **kwargs)
   ans.append(an)
   d = {}
   try:
@@ -449,25 +450,29 @@ if __name__=="__main__":
         numpy.savez('es_freeEnergies%s.npz'%spacename, free_energy=DelF, dfree_energy=dDelF)
     else:
         #if os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata: #Pull data from 
-        if os.path.isfile('es_%s/ns%iN%iepsi%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata: #Pull data from 
-            DelF = numpy.zeros([Nparm, Nparm])
-            dDelF = numpy.zeros([Nparm, Nparm])
-            for iepsi in xrange(Nparm):
-                #DeltaF_file = numpy.load('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, iepsi))
-                DeltaF_file = numpy.load('es_%s/ns%iN%iepsi%i.npz' % (spacename, nstates, Nparm, iepsi))
-                DeltaF_ij = DeltaF_file['DeltaF_ij']
-                dDeltaF_ij = DeltaF_file['dDeltaF_ij']
-                if includeRef:
-                    DelF[iepsi,:] = DeltaF_ij[nstates,nstates+1:]
-                    dDelF[iepsi,:] = dDeltaF_ij[nstates,nstates+1:]
-                else:
-                    DelF[iepsi,:] = DeltaF_ij[Ref_state,nstates:]
-                    dDelF[iepsi,:] = dDeltaF_ij[Ref_state,nstates:]
-        else:
-            figdata = numpy.load('es_freeEnergies%s.npz'%spacename)
-            DelF = figdata['free_energy']
-            dDelF = figdata['dfree_energy']
-    pdb.set_trace()
+        DelF = {}
+        dDelF = {}
+        for nstates in [11,12]:
+            Sstate = str(nstates)
+            if os.path.isfile('es_%s/ns%iN%iepsi%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata: #Pull data from 
+                DelF[Sstate] = numpy.zeros([Nparm, Nparm])
+                dDelF[Sstate] = numpy.zeros([Nparm, Nparm])
+                for iepsi in xrange(Nparm):
+                    #DeltaF_file = numpy.load('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, iepsi))
+                    DeltaF_file = numpy.load('es_%s/ns%iN%iepsi%i.npz' % (spacename, nstates, Nparm, iepsi))
+                    DeltaF_ij = DeltaF_file['DeltaF_ij']
+                    dDeltaF_ij = DeltaF_file['dDeltaF_ij']
+                    if includeRef:
+                        DelF[Sstate][iepsi,:] = DeltaF_ij[nstates,nstates+1:]
+                        dDelF[Sstate][iepsi,:] = dDeltaF_ij[nstates,nstates+1:]
+                    else:
+                        DelF[Sstate][iepsi,:] = DeltaF_ij[Ref_state,nstates:]
+                        dDelF[Sstate][iepsi,:] = dDeltaF_ij[Ref_state,nstates:]
+            else:
+                figdata = numpy.load('es_freeEnergies%s.npz'%spacename)
+                DelF = figdata['free_energy']
+                dDelF = figdata['dfree_energy']
+    #pdb.set_trace()
     ###############################################
     ####### START SPECIFIC FREE ENERGY CALC #######
     ###############################################
@@ -535,110 +540,140 @@ if __name__=="__main__":
     lam_C6 = C6map(lam_range)
         
     #Plot the sigma and epsilon free energies
-    f,(Fplot,dFplot) = plt.subplots(2,1,sharex=True)
+    f,plots = plt.subplots(2,2,sharex=True, sharey=True, figsize=(11,6))
+    Fplot = {'11':plots[0,0],'12':plots[0,1]}
+    dFplot = {'11':plots[1,0],'12':plots[1,1]}
     print "Filling figures with data..."
     '''
     Observant readers will notice that DelF and dDelF are in dimensions of [epsi,sig] but I plot in sig,epsi. That said, the color map is CORRECT with this method... somehow. I questioned it once and then decided to come back to it at a later date.
     '''
-    imgFplot = Fplot.pcolormesh(sig_range**sig_factor,epsi_range,DelF/kjpermolTokT*kjpermolTokcal)
-    pdb.set_trace()
-    #Set the colorbar
-    divFplot = mal(Fplot)
-    caxFplot = divFplot.append_axes('right', size='5%', pad=0.05)
-    cFplot = f.colorbar(imgFplot, cax=caxFplot)
-    #set the minmax colorscales
-    #print cFplot.get_clim()
-    #cvmin, cvmax = (-21.971123537881027, 20.78176716595965) #These are the 11 nstate plots
-    cvmin, cvmax = (-14.542572154421956, 8.6595207877425739)
-    cFplot.set_clim(vmin=cvmin, vmax=cvmax)
-    #Error plot
-    imgdFplot = dFplot.pcolormesh(sig_range**sig_factor,epsi_range,dDelF/kjpermolTokT*kjpermolTokcal)
-    divdFplot = mal(dFplot)
-    caxdFplot = divdFplot.append_axes('right', size='5%', pad=0.05)
-    #Set the minmax colorscales
-    #print imgdFplot.get_clim()
-    #cdvmin, cdvmax = (0.00019094581786378227, 0.45022226894935008) #These are the 11 nstate plots
-    cdvmin, cdvmax = (3.1897634261829015e-05, 0.22292838017499619) 
-    #sys.exit(0)
-    imgdFplot.set_clim(vmin=cdvmin, vmax=cdvmax)
-    cdFplot = f.colorbar(imgdFplot, cax=caxdFplot)
-    #!!! Uncomment this to remake the title
-    #f.suptitle(r'$\Delta G$ (top) and $\delta\Delta G$(bottom) for LJ Spheres' + '\n in units of kcal/mol')
-    #Create the scatter sampled data
-    for i in xrange(nstates):
-        epsi = epsi_samp_space[i]
-        sig = sig_samp_space[i]
-        if i == Ref_state:
-            marker_color = 'k'
-            marker_size  = 70
-            marker_style = 'D'
-        else:
-            marker_color = 'k'
-            marker_size  = 60
-            marker_style = 'x'
-        #if lam == 0 and spacing is logspace:
-        #    lam = 10**(StartSpace-1)
-        Fplot.scatter(sig**sig_factor,epsi, s=marker_size, c=marker_color, marker=marker_style)
-        dFplot.scatter(sig**sig_factor,epsi, s=marker_size, c='w', marker=marker_style)
-    if plotReal and Ref_state == 6:
-            Fplot.scatter(realsig**sig_factor, realepsi, s=60, c='k', marker='+')
-            dFplot.scatter(realsig**sig_factor, realepsi, s=60, c='w', marker='+')
-    #plotlam = sampled_lam
-    #if spacing is logspace and plotlam[0] == 0 and not plotC12_6:
-    #    plotlam[0] = 10**(StartSpace-1)
-    Fplot.plot(sig_range**sig_factor, epsi_plot_range, linewidth=2, color='k')
-    dFplot.plot(sig_range**sig_factor, epsi_plot_range, linewidth=2, color='w')
-    if annotatefig:
-        if plotReal:
-            xyarrs = zip(anrealsig[:-1]**sig_factor, anrealepsi[:-1])
-            antxt = "Chemically Realistic LJ Spheres"
-            xoffset = 0.9
-            realnamelong = ['UA Methane', 'Neopentane', r'C$_{60}$ Sphere']
-            #Label the actual points
-            bbox_def = dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7)
-            Fplot.annotate(realnamelong[0], #String
-                           (realsig[0], realepsi[0]), xycoords='data', #Point Where are we annotating at
-                           xytext=(4, -18), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
-                           bbox=bbox_def) #style
-            Fplot.annotate(realnamelong[1], #String
-                           (realsig[1], realepsi[1]), xycoords='data', #Point Where are we annotating at
-                           xytext=(-62, -20), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
-                           bbox=bbox_def) #style
-            Fplot.annotate(realnamelong[2], #String
-                           (realsig[2], realepsi[2]), xycoords='data', #Point Where are we annotating at
-                           xytext=(6, 10), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
-                           bbox=bbox_def) #style
-        else:
-            xyarrs = [(anrealsig[-1]**sig_factor, anrealepsi[-1])]
-            antxt = "Reference State"
-            xoffset = 1
-        my_annotate(Fplot,
-                antxt,
-                xy_arr=xyarrs, xycoords='data',
-                xytext=(sig_range.max()/2*xoffset, epsiEndSpace/2), textcoords='data',
-                bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7),
-                arrowprops=dict(arrowstyle="-|>",
-                                connectionstyle="arc3,rad=0.2",
-                                fc="w", linewidth=2))
-        if nstates == 12:
-            xypt = [(sig_samp_space[-1], epsi_samp_space[-1])]
-            my_annotate(Fplot,
-                        "Extra Sampling",
-                        xy_arr=xypt, xycoords='data',
-                        xytext=(sigPlotStart*1.05, epsiEndSpace/2*1.05), textcoords='data',
+    imgFplot={}
+    imgdFplot ={}
+    divFplot = {}
+    caxFplot = {}
+    cFplot = {}
+    divdFplot = {}
+    caxdFplot = {}
+    cdFplot = {}
+    for nstates in ['11','12']:
+        imgFplot[nstates] = Fplot[nstates].pcolormesh(sig_range**sig_factor,epsi_range,DelF[nstates]/kjpermolTokT*kjpermolTokcal)
+        #Set the colorbar on the 12 state
+        cvmin, cvmax = (-14.542572154421956, 8.6595207877425739)
+        cdvmin, cdvmax = (3.1897634261829015e-05, 0.22292838017499619) 
+        if nstates == '12':
+            divFplot[nstates] = mal(Fplot[nstates])
+            caxFplot[nstates] = divFplot[nstates].append_axes('right', size='5%', pad=0.05)
+            cFplot[nstates] = f.colorbar(imgFplot[nstates], cax=caxFplot[nstates])
+            #set the minmax colorscales
+            #print cFplot.get_clim()
+            #cvmin, cvmax = (-21.971123537881027, 20.78176716595965) #These are the 11 nstate plots
+            cFplot[nstates].set_clim(vmin=cvmin, vmax=cvmax)
+            #Reduce the number of ticks
+            tick_locator = ticker.MaxNLocator(nbins=5)
+            cFplot[nstates].locator = tick_locator
+            cFplot[nstates].update_ticks()
+        #Error plot
+        imgdFplot[nstates] = dFplot[nstates].pcolormesh(sig_range**sig_factor,epsi_range,dDelF[nstates]/kjpermolTokT*kjpermolTokcal)
+        if nstates == '12':
+            divdFplot[nstates] = mal(dFplot[nstates])
+            caxdFplot[nstates] = divdFplot[nstates].append_axes('right', size='5%', pad=0.05)
+            #Set the minmax colorscales
+            #print imgdFplot.get_clim()
+            #cdvmin, cdvmax = (0.00019094581786378227, 0.45022226894935008) #These are the 11 nstate plots
+            #sys.exit(0)
+            cdFplot[nstates] = f.colorbar(imgdFplot[nstates], cax=caxdFplot[nstates])
+            #Reduce the number of ticks
+            dtick_locator = ticker.MaxNLocator(nbins=5)
+            cdFplot[nstates].locator = dtick_locator
+            cdFplot[nstates].update_ticks()
+        imgdFplot[nstates].set_clim(vmin=cdvmin, vmax=cdvmax)
+        #!!! Uncomment this to remake the title
+        #f.suptitle(r'$\Delta G$ (top) and $\delta\Delta G$(bottom) for LJ Spheres' + '\n in units of kcal/mol')
+        #Create the scatter sampled data
+        for i in xrange(int(nstates)):
+            epsi = epsi_samp_space[i]
+            sig = sig_samp_space[i]
+            if i == Ref_state:
+                marker_color = 'k'
+                marker_size  = 70
+                marker_style = 'D'
+            else:
+                marker_color = 'k'
+                marker_size  = 60
+                marker_style = 'x'
+            #if lam == 0 and spacing is logspace:
+            #    lam = 10**(StartSpace-1)
+            Fplot[nstates].scatter(sig**sig_factor,epsi, s=marker_size, c=marker_color, marker=marker_style)
+            dFplot[nstates].scatter(sig**sig_factor,epsi, s=marker_size, c='w', marker=marker_style)
+        if plotReal and Ref_state == 6 and nstates == '12':
+                Fplot[nstates].scatter(realsig**sig_factor, realepsi, s=60, c='k', marker='+')
+                dFplot[nstates].scatter(realsig**sig_factor, realepsi, s=60, c='w', marker='+')
+        #plotlam = sampled_lam
+        #if spacing is logspace and plotlam[0] == 0 and not plotC12_6:
+        #    plotlam[0] = 10**(StartSpace-1)
+        Fplot[nstates].plot(sig_range**sig_factor, epsi_plot_range, linewidth=2, color='k')
+        dFplot[nstates].plot(sig_range**sig_factor, epsi_plot_range, linewidth=2, color='w')
+        if annotatefig:
+            if plotReal and nstates == '12':
+                xyarrs = zip(anrealsig[:-1]**sig_factor, anrealepsi[:-1])
+                antxt = "Chemically Realistic LJ Spheres"
+                xoffset = 0.9
+                realnamelong = ['UA Methane', 'Neopentane', r'C$_{60}$ Sphere']
+                #Label the actual points
+                bbox_def = dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7)
+                Fplot[nstates].annotate(realnamelong[0], #String
+                               (realsig[0], realepsi[0]), xycoords='data', #Point Where are we annotating at
+                               xytext=(4, -18), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
+                               bbox=bbox_def) #style
+                Fplot[nstates].annotate(realnamelong[1], #String
+                               (realsig[1], realepsi[1]), xycoords='data', #Point Where are we annotating at
+                               xytext=(-62, -20), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
+                               bbox=bbox_def) #style
+                Fplot[nstates].annotate(realnamelong[2], #String
+                               (realsig[2], realepsi[2]), xycoords='data', #Point Where are we annotating at
+                               xytext=(6, 10), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
+                               bbox=bbox_def) #style
+            else:
+                xyarrs = [(anrealsig[-1]**sig_factor, anrealepsi[-1])]
+                antxt = "Reference State"
+                xoffset = 1
+            if nstates == '11':
+                my_annotate(Fplot[nstates],
+                        antxt,
+                        xy_arr=xyarrs, xycoords='data',
+                        xytext=(sig_range.max()/2*xoffset, epsiEndSpace/2), textcoords='data',
                         bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7),
                         arrowprops=dict(arrowstyle="-|>",
                                         connectionstyle="arc3,rad=0.2",
                                         fc="w", linewidth=2))
-    for ax in [Fplot,dFplot]:
-        ax.set_yscale(spacename)
-        ax.set_xscale(spacename)
-        ax.set_ylim([epsiPlotStart,epsiPlotEnd])
-        ax.set_xlim([sigPlotStart,sigPlotEnd])
-        ax.patch.set_color('grey')
-    f.subplots_adjust(hspace=0.02)
-    f.text(0.05, .5, ylabel, rotation='vertical', horizontalalignment='center', verticalalignment='center', fontsize=20)
-    dFplot.set_xlabel(xlabel, fontsize=20)
+            if nstates == '12':
+                xypt = [(sig_samp_space[-1], epsi_samp_space[-1])]
+                my_annotate(Fplot[nstates],
+                            #"Extra Sampling",
+                            "Additional Sampling",
+                            xy_arr=xypt, xycoords='data',
+                            xytext=(sigPlotStart*1.05, epsiEndSpace/2*1.05), textcoords='data',
+                            bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7),
+                            arrowprops=dict(arrowstyle="-|>",
+                                            connectionstyle="arc3,rad=0.2",
+                                            fc="w", linewidth=2))
+        for ax in [Fplot[nstates],dFplot[nstates]]:
+            ax.set_yscale(spacename)
+            ax.set_xscale(spacename)
+            if nstates == '11':
+                ax.set_ylim([epsiPlotStart,epsiPlotEnd])
+            ax.set_xlim([sigPlotStart,sigPlotEnd])
+            ax.patch.set_color('grey')
+            #Reduce the number of ticks
+            ax.locator_params(nbins=5)
+        #dFplot[nstates].set_xlabel(xlabel, fontsize=20)
+        #Fplot[nstates].set_title('Number of\nsampled states: %i'%int(nstates),fontsize=15)
+    f.subplots_adjust(hspace=0.02, wspace=0.02, top=.91, left=.1, right=.88)
+    f.text(0.04, .5, ylabel, rotation='vertical', horizontalalignment='center', verticalalignment='center', fontsize=21)
+    f.text(0.5, .04, xlabel,  horizontalalignment='center', verticalalignment='center', fontsize=21)
+    #Name of each plot
+    f.text(0.965, .71, r'$\Delta G$',  horizontalalignment='center', verticalalignment='center', fontsize=21)
+    f.text(0.965, .27, r'$\delta\left(\Delta G\right)$',  horizontalalignment='center', verticalalignment='center', fontsize=21)
     if savefigs:
         print "Rendering figures..."
         if plotReal:
@@ -646,7 +681,8 @@ if __name__=="__main__":
         else:
             plotrealstr = "F"
         f.patch.set_alpha(0.0)
-        f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%2d.png' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace*10), bbox_inches='tight', dpi=600)  
+        #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%2d.png' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace*10), bbox_inches='tight', dpi=600)  
+        f.savefig('LJParameterizationComparison.png', bbox_inches='tight', dpi=600)  
         #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
         #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.pdf' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
         #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
