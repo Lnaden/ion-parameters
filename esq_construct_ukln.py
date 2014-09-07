@@ -47,7 +47,7 @@ else:
 
 #Main output controling vars:
 #nstate options: 24, 32, 40, 49
-nstates = 26
+nstates = 36
 Nparm = 51 #51, 101, or 151
 plotReal = False
 sig_factor=1
@@ -85,17 +85,17 @@ epsi_samp_space = numpy.append(epsi_samp_space, 0.8)
 #Ions 12-25                                             12          13          14          15          16          17          18          19          20          21          22          23          24          25
 sig_samp_space  = numpy.append(sig_samp_space, [0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535])
 epsi_samp_space = numpy.append(epsi_samp_space,[      0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21])
-#Ions 26-28                                             26          27          28
-sig_samp_space  = numpy.append(sig_samp_space, [1.04611987, 1.03181511, 1.06108900])
-epsi_samp_space = numpy.append(epsi_samp_space,[0.98465072, 1.89271088, 2.72821095])
+#Ions 26-35                                             26          27          28          29          30          31          32          33          34          35
+sig_samp_space  = numpy.append(sig_samp_space, [0.89830417, 0.89119881, 0.92340246, 0.89588727, 1.11223185, 1.11840500, 1.11239744, 1.10950395, 1.11391239, 0.87474864])
+epsi_samp_space = numpy.append(epsi_samp_space,[1.09793856, 3.02251958, 0.76784386, 1.91285202, 0.89731119, 0.64068812, 2.98142758, 2.66769708, 1.81440736, 2.76843218])
 
 
 sig3_samp_space = sig_samp_space**3
 
 #                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,      12,      13,      14,      15,      16,      17,      18,      19,      20,      21,      22,      23,      24,      25 
 q_samp_space    = numpy.array([  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0, -2.0000, -1.8516, -1.6903, -1.5119, -1.3093, -1.0690, -0.7559, +2.0000, +1.8516, +1.6903, +1.5119, +1.3093, +1.0690, +0.7559])
-#Ions 26-28
-q_samp_space = numpy.append(q_samp_space, [1.0125, -1.4655, 1.0495])
+#Ions 26-35                                     26      27      28      29       30      31      32       33      34       35
+q_samp_space = numpy.append(q_samp_space, [-1.1094, 1.1827, 1.1062, 1.1628, -1.2520, 1.2705, 1.2610, -1.2475, 1.2654, -1.1594])
 #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #Real molecule sampling
@@ -198,13 +198,16 @@ def find_centers(X, K, weights, verbose=False):
     #mu = [weights[tuple(j for j in i)] for i in mucord]
     iteration = 1
     while not has_converged(mu,oldmu):
-        if verbose: print "Iteration: %i" % iteration
+        if verbose:
+            sys.stdout.flush()
+            sys.stdout.write('\rIteration: %i' % iteration)
         oldmu=mu
         #assign all points in X to clusters
         clusters = cluster_points(X,mu)
         #Re-evaluate centers
         mu = reevaluate_centers(clusters, weights)
         iteration += 1
+    if verbose: sys.stdout.write('\n')
     return mu, clusters
 def closest_index(point, features, index):
     #Find the closest point in features at index that is near point.
@@ -727,6 +730,8 @@ if __name__=="__main__":
             DelF = numpy.zeros([Nparm, Nparm, Nparm])
             dDelF = numpy.zeros([Nparm, Nparm, Nparm])
             for iq in xrange(Nparm):
+                sys.stdout.flush()
+                sys.stdout.write('\rSave data detected, loading file %d/%d...' % (iq,Nparm-1))
                 DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq))
                 DeltaF_ij = DeltaF_file['DeltaF_ij']
                 dDeltaF_ij = DeltaF_file['dDeltaF_ij']
@@ -737,6 +742,7 @@ if __name__=="__main__":
                     #Unwrap the data
                     DelF[iq, iepsi,:] = DeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
                     dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+            sys.stdout.write('\n')
         else:
             figdata = numpy.load('esq_freeEnergies%s.npz'%spacename)
             DelF = figdata['free_energy']
@@ -891,7 +897,7 @@ if __name__=="__main__":
         ndistrib = 10 # Number of poitns to distribute
         percentSize = Nsize/float(Nsize.sum()) #Generate percentages
         deciPercents = percentSize * 10 #Convert to deciPercent (e.g. 0.34 = 34% = 3.4 deci%)
-        sortedNdxMaxMin = numpy.argsort(decipercents)[::-1] #Figure out which has the max
+        sortedNdxMaxMin = numpy.argsort(deciPercents)[::-1] #Figure out which has the max
         updown = numpy.ceil
         pointsleft = ndistrib
         for index in sortedNdxMaxMin:
@@ -913,7 +919,7 @@ if __name__=="__main__":
         resamp_points = numpy.zeros([Nresample.sum(), 3])
         closest_interiors = numpy.zeros(resamp_points.shape)
         #Tesalate over where multiple samples are needed based on k-clustering Lloyd's algorithm
-        pdb.set_trace()
+        #pdb.set_trace()
         resamp_counter = 0
         for i in xrange(num_features):
             index = i + 1 #Convert to index
@@ -935,6 +941,7 @@ if __name__=="__main__":
                 #resamp_counter += 1
                 
         pdb.set_trace()
+        numpy.savetxt('resamp_points_n%i.txt'%nstates, resamp_points)
         #Test: set the dDelF where there are not features to 0
         #dDelF[ma.getmask(mdDelF_notouch)] = 0
 
