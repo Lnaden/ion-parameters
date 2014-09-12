@@ -1,2 +1,8 @@
 #Ignore pyc files
 *.pyc
+#Real molecule folders
+C60*
+NOP*
+UAm*
+esq_linear
+es_linear

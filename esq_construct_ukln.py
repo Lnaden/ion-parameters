@@ -34,20 +34,20 @@ timekln = False #Timing information
 subsample_method = 'presubsampled'
 
 #logspace or linspace
-narg = len(sys.argv)
-if narg > 1:
-    if sys.argv[1] == 'log':
-        spacing=logspace
-    elif sys.argv[1] == 'lin':
-        spacing=linspace
-    else:
-        spacing=linspace
-else:
-    spacing=linspace
+#narg = len(sys.argv)
+#if narg > 1:
+#    if sys.argv[1] == 'log':
+#        spacing=logspace
+#    elif sys.argv[1] == 'lin':
+#        spacing=linspace
+#    else:
+#        spacing=linspace
+#else:
+#    spacing=linspace
+spacing=linspace
+
 
 #Main output controling vars:
-#nstate options: 24, 32, 40, 49
-nstates = 46
 Nparm = 51 #51, 101, or 151
 plotReal = False
 sig_factor=1
@@ -57,51 +57,6 @@ if Nparm == 151 or True:
     alle = True
 else:
    alle = False
-
-sig_min = 0.1 #nm
-sig_max = 1.2
-sig3_samp_space = linspace(sig_min**3, sig_max**3, nstates)
-sig_samp_space = sig3_samp_space**(1.0/3)
-sig_min = 0.25 #updated for 
-sig_samp_space[0] = sig_min
-sig3_samp_space[0] = sig_samp_space[0]**3
-epsi_min = 0.1 #kJ/mol
-epsi_max = 1.2
-q_min = -2.0
-q_max = +2.0
-epsi_samp_space = linspace(epsi_min, epsi_max, 11)
-lamto_epsi = lambda lam: (epsi_max - epsi_min)*lam + epsi_min
-lamto_sig3 = lambda lam: (sig_max**3 - sig_min**3)*lam + sig
-lamto_sig = lambda lam: lamto_sig3(lam)**(1.0/3)
-
-
-#epsi_samp_space = numpy.array([0.100, 6.960, 2.667, 1.596, 1.128, 0.870, 0.706, 0.594, 0.513, 0.451, 0.40188])
-#sig_samp_space = numpy.array([0.25000, 0.41677, 0.58856, 0.72049, 0.83175, 0.92978, 1.01843, 1.09995, 1.17584, 1.24712, 1.31453])
-#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-#This is the true sigma sampling space because I made a small math error when initially spacing 
-#                                0           1            2            3            4            5            6            7            8            9   10   11
-sig_samp_space = numpy.array([0.25, 0.57319535, 0.712053172, 0.811158734, 0.890612296, 0.957966253, 1.016984881, 1.069849165, 1.117949319, 1.162232374, 1.2, 0.3])
-epsi_samp_space = numpy.append(epsi_samp_space, 0.8)
-#Ions 12-25                                             12          13          14          15          16          17          18          19          20          21          22          23          24          25
-sig_samp_space  = numpy.append(sig_samp_space, [0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535])
-epsi_samp_space = numpy.append(epsi_samp_space,[      0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21])
-#Ions 26-35                                             26          27          28          29          30          31          32          33          34          35
-sig_samp_space  = numpy.append(sig_samp_space, [0.89830417, 0.89119881, 0.92340246, 0.89588727, 1.11223185, 1.11840500, 1.11239744, 1.10950395, 1.11391239, 0.87474864])
-epsi_samp_space = numpy.append(epsi_samp_space,[1.09793856, 3.02251958, 0.76784386, 1.91285202, 0.89731119, 0.64068812, 2.98142758, 2.66769708, 1.81440736, 2.76843218])
-#Ions 36-45                                             36           37           38           39           40           41           42           43           44           45          
-sig_samp_space  = numpy.append(sig_samp_space, [1.10602708, 0.867445388, 0.807577825, 0.881299638, 1.117410858, 1.113348358, 0.912443052, 0.804213494, 1.108191619, 1.105962702])
-epsi_samp_space = numpy.append(epsi_samp_space,[0.982771643, 2.997387823, 0.966241439, 1.852925855, 0.65263393, 1.818471648, 0.703674209, 2.706448907, 2.982717551, 2.71202082])
-
-
-sig3_samp_space = sig_samp_space**3
-
-#                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,      12,      13,      14,      15,      16,      17,      18,      19,      20,      21,      22,      23,      24,      25 
-q_samp_space    = numpy.array([  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0, -2.0000, -1.8516, -1.6903, -1.5119, -1.3093, -1.0690, -0.7559, +2.0000, +1.8516, +1.6903, +1.5119, +1.3093, +1.0690, +0.7559])
-#Ions 26-35                                     26      27      28      29       30      31      32       33      34       35
-q_samp_space = numpy.append(q_samp_space, [-1.1094, 1.1827, 1.1062, 1.1628, -1.2520, 1.2705, 1.2610, -1.2475, 1.2654, -1.1594])
-#Ions 36-45                                     36      37       38      39      40      41      42       43      44       45          
-q_samp_space = numpy.append(q_samp_space, [-0.6057, 1.3179, -0.4568, 1.3153, 1.3060, 1.2911, 1.3106, -0.5160, 1.2880, -0.6149])
-#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 #Real molecule sampling
 realname = ['UAm', 'NOP', 'C60', 'LJ6', 'null', 'LJ11']
@@ -113,29 +68,7 @@ realq    = numpy.array([     0,      0,      0,      0, 0,   0])
 #epsi_max = 0.40188
 #sig_max = 1.31453
 
-if spacing is logspace:
-    StartSpace = -5
-    EndSpace   = 0
-    spacename='log'
-    PlotStart = 10**StartSpace
-    PlotEnd   = 10**EndSpace
-elif spacing is linspace:
-    sigStartSpace = sig_min
-    sigEndSpace   = sig_max
-    epsiStartSpace = epsi_min
-    qStartSpace = q_min
-    qEndSpace = q_max
-    if alle:
-        epsiEndSpace   = 3.6 #!!! Manual set
-    else:
-        epsiEndSpace   = epsi_max
-    spacename='linear'
-    sigPlotStart = sigStartSpace**sig_factor
-    sigPlotEnd   = sigEndSpace**sig_factor
-    epsiPlotStart = epsiStartSpace
-    epsiPlotEnd   = epsiEndSpace
-    qPlotStart = qStartSpace
-    qPlotEnd = qEndSpace
+
 
 
 ################ SUBROUTINES ##################
@@ -389,7 +322,7 @@ class consts(object): #Class to house all constant information
             self.shape = self.u_kln.shape
         self._itermax = iter
 
-    def __init__(self, file=None, nstates=nstates, itermax=1):
+    def __init__(self, nstates, file=None, itermax=1):
         loaded = False
         self._itermax=itermax
         self.nstates=nstates
@@ -426,7 +359,51 @@ class consts(object): #Class to house all constant information
         self.shape = self.u_kln.shape
         self.units = True
 
-if __name__=="__main__":
+#if __name__=="__main__":
+def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
+    #Initilize limts
+    sig3_samp_space = linspace(sig_samp_space**3)
+    #These are the limits used to compute the constant matricies
+    #They should match with LJ 0 and 5, ALWAYS
+    q_min = -2.0
+    q_max = +2.0
+    #epsi_min = 0.1 #kJ/mol
+    #epsi_max = 0.65
+    #sig_min = 0.25
+    #sig_max = 0.95796625
+    epsi_min = epsi_samp_space[0]
+    epsi_max = epsi_samp_space[5]
+    sig_min = sig_samp_space[0]
+    sig_max = sig_samp_space[5]
+    lamto_epsi = lambda lam: (epsi_max - epsi_min)*lam + epsi_min
+    lamto_sig3 = lambda lam: (sig_max**3 - sig_min**3)*lam + sig
+    lamto_sig = lambda lam: lamto_sig3(lam)**(1.0/3)
+    if spacing is logspace:
+        StartSpace = -5
+        EndSpace   = 0
+        spacename='log'
+        PlotStart = 10**StartSpace
+        PlotEnd   = 10**EndSpace
+    elif spacing is linspace:
+        sigStartSpace = sig_min
+        sigEndSpace   = sig_max
+        epsiStartSpace = epsi_min
+        qStartSpace = q_min
+        qEndSpace = q_max
+        if alle:
+            epsiEndSpace   = 3.6 #!!! Manual set
+        else:
+            epsiEndSpace   = epsi_max
+        spacename='linear'
+        sigPlotStart = sigStartSpace**sig_factor
+        sigPlotEnd   = sigEndSpace**sig_factor
+        epsiPlotStart = epsiStartSpace
+        epsiPlotEnd   = epsiEndSpace
+        qPlotStart = qStartSpace
+        qPlotEnd = qEndSpace
+
+
+
     #Test numpy's savez_compressed formula
     try:
         savez = numpy.savez_compressed
@@ -438,7 +415,8 @@ if __name__=="__main__":
     #dhdlstates = 4 #Column where dhdl to other states starts, also coulmn for U0
     g_en_start = 19 #Row where data starts in g_energy output
     g_en_energy = 1 #Column where the energy is located
-    niterations = len(open('lj10/prod/energy10_10.xvg','r').readlines()[g_en_start:])
+    #niterations = len(open('lj10/prod/energy10_10.xvg','r').readlines()[g_en_start:])
+    niterations_max = 30001
     #Min and max sigmas:
     fC12 = lambda epsi,sig: 4*epsi*sig**12
     fC6 = lambda epsi,sig: 4*epsi*sig**6
@@ -461,7 +439,7 @@ if __name__=="__main__":
     lam_range = linspace(0,1,nstates)
     subsampled = numpy.zeros([nstates],dtype=numpy.bool)
     if load_ukln and os.path.isfile('esq_ukln_consts_n%i.npz'%nstates):
-        energies = consts(file='esq_ukln_consts_n%i.npz'%nstates)
+        energies = consts(nstates, file='esq_ukln_consts_n%i.npz'%nstates)
         #ukln_consts = numpy.load('esq_ukln_consts_n%i.npz'%nstates)
         #u_kln = ukln_consts['u_kln']
         #const_R_matrix = ukln_consts['const_R_matrix'] 
@@ -471,19 +449,8 @@ if __name__=="__main__":
         #const_q2_matrix = ukln_consts['const_q2_matrix']
     else:
         #Initial u_kln
-        energies = consts()
+        energies = consts(nstates)
         g_t = numpy.zeros([nstates])
-        #u_kln = numpy.zeros([nstates,nstates,niterations])
-        #const_unaffected_matrix = numpy.zeros([nstates,niterations])
-        #const_Un_matrix = numpy.zeros([nstates,niterations])
-        #const_R0_matrix = numpy.zeros([nstates,niterations])
-        #const_R1_matrix = numpy.zeros([nstates,niterations])
-        #const_R_matrix = numpy.zeros([nstates,niterations])
-        #const_A0_matrix = numpy.zeros([nstates,niterations])
-        #const_A1_matrix = numpy.zeros([nstates,niterations])
-        #const_A_matrix = numpy.zeros([nstates,niterations])
-        #const_q_matrix = numpy.zeros([nstates,niterations])
-        #const_q2_matrix = numpy.zeros([nstates,niterations])
         #Read in the data
         for k in xrange(nstates):
             print "Importing LJ = %02i" % k
@@ -509,7 +476,7 @@ if __name__=="__main__":
                         energy_dic['rep']['%s'%l] = open('lj%s/prod/energy%s_%s_rep.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the repulsive energies at 0, nstates-1, and K
                 energy_dic['q']  =  open('lj%s/prod/energy%s_q.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
                 energy_dic['q2']  =  open('lj%s/prod/energy%s_q2.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
-                iter = niterations
+                iter = niterations_max
                 #Subsample
                 tempenergy = numpy.zeros(iter)
                 for frame in xrange(iter):
@@ -753,38 +720,7 @@ if __name__=="__main__":
             DelF = figdata['free_energy']
             dDelF = figdata['dfree_energy']
     #pdb.set_trace()
-    ###############################################
-    ####### START SPECIFIC FREE ENERGY CALC #######
-    ###############################################
-    #Mapping is for UAmethane, NEoPentane, and C60 in that order
-    #realname = ['UAm', 'NOP', 'C60', 'LJ6', 'null', 'LJ11']
-    #nreal = len(realname)
-    #realepsi = numpy.array([1.2301, 3.4941, 1.0372, 0.7600, 0, 0.8])
-    #realsig  = numpy.array([0.3730, 0.6150, 0.9452, 1.0170, 0, 0.3])
-    #anrealepsi = numpy.array([1.2301, 3.4941, 1.0372, 0.7600])
-    #anrealsig  = numpy.array([0.3730, 0.6150, 0.9452, 1.0170])
-    #u_kln_sub = numpy.zeros([nstates+nreal,nstates+nreal,niterations])
-    #u_kln_sub[:nstates,:nstates,:] = u_kln
-    #f_k = comp.mbar.f_k
-    #f_k_sub = numpy.zeros(nstates+nreal)
-    #f_k_sub[:nstates] = f_k
-    #N_k = comp.mbar.N_k
-    #N_k_sub = numpy.zeros(nstates+nreal, numpy.int32)
-    #N_k_sub[:nstates] = N_k
-    #for imol in xrange(nreal):
-    #    #Save data files
-    #    epsi = realepsi[imol]
-    #    sig = realsig[imol]
-    #    #Create Sub matrix
-    #    u_kln_sub[:nstates,imol+nstates+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix + flamC6sqrt(epsi,sig)*const_A_matrix + const_unaffected_matrix
-    ##mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
-    ##(realDeltaF_ij, realdDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-    ##printFreeEnergy(realDeltaF_ij,realdDeltaF_ij)
-    ##for imol in xrange(nreal):
-    ##    print "Free energy of %s relative to LJ6: %.3f +- %.3f with %i states" % (realname[imol], realDeltaF_ij[Ref_state,nstates+imol], realdDeltaF_ij[Ref_state,nstates+imol], nstates)
-    #print realepsi
-    #print realsig
-    ###############################################
+   ###############################################
     ######### END FREE ENERGY CALCULATIONS ########
     ###############################################
     #Set up a mask
@@ -815,8 +751,6 @@ if __name__=="__main__":
         C6map = lambda x: x
         xlabel = r'$\lambda$ of $C12_i$$'
         ylabel = r'$\lambda$ of $C6_i$$'
-    lam_C12 = C12map(lam_range)
-    lam_C6 = C6map(lam_range)
         
     DelF *= kjpermolTokcal/kjpermolTokT
     dDelF *= kjpermolTokcal/kjpermolTokT
@@ -945,8 +879,8 @@ if __name__=="__main__":
                 #resamp_points[resamp_counter,:] = coms_esq[i,:]
                 #resamp_counter += 1
                 
-        pdb.set_trace()
         numpy.savetxt('resamp_points_n%i.txt'%nstates, resamp_points)
+        numpy.save('resamp_points_n%i.npy'%nstates, resamp_points)
         #Test: set the dDelF where there are not features to 0
         #dDelF[ma.getmask(mdDelF_notouch)] = 0
 
@@ -1204,26 +1138,65 @@ if __name__=="__main__":
         filename='Animated_charging_rel{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
     else:
         filename='Animated_charging{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
-    pdb.set_trace()
+    #pdb.set_trace()
     aniU.save(filename, dpi=400)
     #save a single frame
-    qframe=40
-    moveq(qframe)
-    f.savefig('DelF_Nstate_%i_Qndx_%i.png' % (nstates, qframe), bbox_inches='tight', dpi=400)
-    if savefigs:
-        if plotReal:
-            plotrealstr = "T"
-        else:
-            plotrealstr = "F"
-        f.patch.set_alpha(0.0)
-        #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.png' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight', dpi=600)  
-        print "Making the PDF, boss!"
-        #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.pdf' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
-        #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
-    else:
-        plt.show()
+    #qframe=40
+    #moveq(qframe)
+    #f.savefig('DelF_Nstate_%i_Qndx_%i.png' % (nstates, qframe), bbox_inches='tight', dpi=400)
+    #if savefigs:
+    #    if plotReal:
+    #        plotrealstr = "T"
+    #    else:
+    #        plotrealstr = "F"
+    #    f.patch.set_alpha(0.0)
+    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.png' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight', dpi=600)  
+    #    print "Making the PDF, boss!"
+    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.pdf' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
+    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
+    #else:
+    #    plt.show()
     #pdb.set_trace()
     #sys.exit(0) #Terminate here
 ####################################################################################
 ####################################################################################
 ####################################################################################
+
+if __name__ == "__main__":
+    from optparse import OptionParser
+    parser = OptionParser()
+    parser.add_option("--nstates", dest="nstates", default=None, help="Set the number of states", metavar="NSTATES")
+    #nstate options: 24, 32, 40, 49
+    (options, args) = parser.parse_args()
+    if options.nstates is None:
+        nstates = 21
+    else:
+        nstates = options.nstates
+    #epsi_samp_space = numpy.array([0.100, 6.960, 2.667, 1.596, 1.128, 0.870, 0.706, 0.594, 0.513, 0.451, 0.40188])
+    #sig_samp_space = numpy.array([0.25000, 0.41677, 0.58856, 0.72049, 0.83175, 0.92978, 1.01843, 1.09995, 1.17584, 1.24712, 1.31453])
+    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    #This is the true sigma sampling space because I made a small math error when initially spacing 
+    #                                0           1            2            3            4            5            6            7            8            9   10   11
+    sig_samp_space = numpy.array([0.25, 0.57319535, 0.712053172, 0.811158734, 0.890612296, 0.957966253, 1.016984881, 1.069849165, 1.117949319, 1.162232374, 1.2, 0.3])
+    epsi_samp_space = numpy.append(epsi_samp_space, 0.8)
+    #Ions 12-25                                             12          13          14          15          16          17          18          19          20          21          22          23          24          25
+    sig_samp_space  = numpy.append(sig_samp_space, [0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535])
+    epsi_samp_space = numpy.append(epsi_samp_space,[      0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21])
+    #Ions 26-35                                             26          27          28          29          30          31          32          33          34          35
+    sig_samp_space  = numpy.append(sig_samp_space, [0.89830417, 0.89119881, 0.92340246, 0.89588727, 1.11223185, 1.11840500, 1.11239744, 1.10950395, 1.11391239, 0.87474864])
+    epsi_samp_space = numpy.append(epsi_samp_space,[1.09793856, 3.02251958, 0.76784386, 1.91285202, 0.89731119, 0.64068812, 2.98142758, 2.66769708, 1.81440736, 2.76843218])
+    #Ions 36-45                                             36           37           38           39           40           41           42           43           44           45          
+    sig_samp_space  = numpy.append(sig_samp_space, [1.10602708, 0.867445388, 0.807577825, 0.881299638, 1.117410858, 1.113348358, 0.912443052, 0.804213494, 1.108191619, 1.105962702])
+    epsi_samp_space = numpy.append(epsi_samp_space,[0.982771643, 2.997387823, 0.966241439, 1.852925855, 0.65263393, 1.818471648, 0.703674209, 2.706448907, 2.982717551, 2.71202082])
+    
+    
+    sig3_samp_space = sig_samp_space**3
+    
+    #                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,      12,      13,      14,      15,      16,      17,      18,      19,      20,      21,      22,      23,      24,      25 
+    q_samp_space    = numpy.array([  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0, -2.0000, -1.8516, -1.6903, -1.5119, -1.3093, -1.0690, -0.7559, +2.0000, +1.8516, +1.6903, +1.5119, +1.3093, +1.0690, +0.7559])
+    #Ions 26-35                                     26      27      28      29       30      31      32       33      34       35
+    q_samp_space = numpy.append(q_samp_space, [-1.1094, 1.1827, 1.1062, 1.1628, -1.2520, 1.2705, 1.2610, -1.2475, 1.2654, -1.1594])
+    #Ions 36-45                                     36      37       38      39      40      41      42       43      44       45          
+    q_samp_space = numpy.append(q_samp_space, [-0.6057, 1.3179, -0.4568, 1.3153, 1.3060, 1.2911, 1.3106, -0.5160, 1.2880, -0.6149])
+    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space)
