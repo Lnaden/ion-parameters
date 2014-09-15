@@ -69,6 +69,11 @@ realq    = numpy.array([     0,      0,      0,      0, 0,   0])
 #sig_max = 1.31453
 
 
+#Test numpy's savez_compressed formula
+try:
+    savez = numpy.savez_compressed
+except:
+    savez = numpy.savez
 
 
 ################ SUBROUTINES ##################
@@ -362,7 +367,7 @@ class consts(object): #Class to house all constant information
 #if __name__=="__main__":
 def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #Initilize limts
-    sig3_samp_space = linspace(sig_samp_space**3)
+    sig3_samp_space = sig_samp_space**3
     #These are the limits used to compute the constant matricies
     #They should match with LJ 0 and 5, ALWAYS
     q_min = -2.0
@@ -404,11 +409,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
 
 
 
-    #Test numpy's savez_compressed formula
-    try:
-        savez = numpy.savez_compressed
-    except:
-        savez = numpy.savez
     #generate sample length
     #dhdlstart = 34 #Row where data starts
     #dhdlenergy = 1 #column where energy is
@@ -460,7 +460,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 energy_dic['null'] = open('lj%s/prod/subenergy%s_null.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the null energies (unaffected) of the K states
                 for l in xrange(nstates):
                     energy_dic['full']['%s'%l] = open('lj%s/prod/subenergy%s_%s.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the full energies for each state at KxL
-                    if l == 10 or l == 0:
+                    if l == 5 or l == 0:
                         energy_dic['rep']['%s'%l] = open('lj%s/prod/subenergy%s_%s_rep.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the repulsive energies at 0, nstates-1, and K
                 energy_dic['q']  =  open('lj%s/prod/subenergy%s_q.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
                 energy_dic['q2']  =  open('lj%s/prod/subenergy%s_q2.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
@@ -472,7 +472,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 energy_dic['null'] = open('lj%s/prod/energy%s_null.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the null energies (unaffected) of the K states
                 for l in xrange(nstates):
                     energy_dic['full']['%s'%l] = open('lj%s/prod/energy%s_%s.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the full energies for each state at KxL
-                    if l == 10 or l == 0:
+                    if l == 5 or l == 0:
                         energy_dic['rep']['%s'%l] = open('lj%s/prod/energy%s_%s_rep.xvg' %(k,k,l),'r').readlines()[g_en_start:] #Read in the repulsive energies at 0, nstates-1, and K
                 energy_dic['q']  =  open('lj%s/prod/energy%s_q.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
                 energy_dic['q2']  =  open('lj%s/prod/energy%s_q2.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the charge potential energy
@@ -508,7 +508,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 #R0 = U_rep[k,k,n] + dhdl[k,0,n] - Un[k,n]
                 energies.const_R0_matrix[k,n] = float(energy_dic['rep']['%s'%(0)][frame].split()[g_en_energy]) - energies.const_Un_matrix[k,n]
                 #R1 = U_rep[k,k,n] + dhdl[k,-1,n] - Un[k,n]
-                energies.const_R1_matrix[k,n] = float(energy_dic['rep']['%s'%(10)][frame].split()[g_en_energy]) - energies.const_Un_matrix[k,n]
+                energies.const_R1_matrix[k,n] = float(energy_dic['rep']['%s'%(5)][frame].split()[g_en_energy]) - energies.const_Un_matrix[k,n]
                 energies.const_R_matrix[k,n] = energies.const_R1_matrix[k,n] - energies.const_R0_matrix[k,n]
                 #Finish the total unaffected term
                 #Total unaffected = const_Un + U0 = const_Un + (U_full[k,0,n] - const_Un) = U_full[k,0,n]
@@ -518,7 +518,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 #Attractive term
                 #u_A = U_full[k,n] - constR[k,n] - const_unaffected[k,n]
                 energies.const_A0_matrix[k,n] = energies.u_kln[k,0,n] - energies.const_R0_matrix[k,n] - energies.const_Un_matrix[k,n]
-                energies.const_A1_matrix[k,n] = energies.u_kln[k,10,n] - energies.const_R1_matrix[k,n] - energies.const_Un_matrix[k,n]
+                energies.const_A1_matrix[k,n] = energies.u_kln[k,5,n] - energies.const_R1_matrix[k,n] - energies.const_Un_matrix[k,n]
                 energies.const_A_matrix[k,n] = energies.const_A1_matrix[k,n] - energies.const_A0_matrix[k,n]
                 n += 1
         energies.determine_all_N_k()
@@ -767,7 +767,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     id_regions = True
     if id_regions:
         from scipy import ndimage
-        err_threshold = 0.25 #kcal/mol
+        err_threshold = 0.5 #kcal/mol
         #Filter data. notouch masks covers the sections we are not examining. touch is the sections we want
         mdDelF_notouch = ma.masked_less(dDelF, err_threshold)
         mdDelF_touch = ma.masked_greater(dDelF, err_threshold)

@@ -17,7 +17,7 @@ def C6_C12(epsi,sig):
 def rsync(files, dest='.', flags=None, direction='to'):
     #Make an rsync move to or from fir
     #files is a string that is the exact command that you send to fluorine
-    basersync = 'rsync -e \'"ssh -i /home/ln8dc/.ssh/fluorinekey"\' ' #required space
+    #basersync = 'rsync -e \'"ssh -i /home/ln8dc/.ssh/fluorinekey"\' ' #required space
     #The escaped single quote around the double is required to get the shlex processor to actually preserve the double quote in the argment pass... a bit annoying, but it works. Without it, the "..." is correctly parsed as a single token, but then the token is passed as a plain string without the "" causing the --rsh command to only interpret the "ssh" part.
     basersync = 'rsync "-e ssh -i /home/ln8dc/.ssh/fluorinekey" ' #required space
     if flags is not None:
@@ -29,17 +29,18 @@ def rsync(files, dest='.', flags=None, direction='to'):
     args = shlex.split(cmd)
     p = sp.Popen(args, stdout=sp.PIPE, stderr=sp.PIPE, shell=False).wait()
     #(stdout, stderr) = p.communicate()
+    return
 def runsh(cmdstr, IO=False, delay=0.2, stdout=sp.PIPE, stderr=sp.PIPE):
     #Run an command based on the cmd string
     args = shlex.split(cmdstr)
-    p = sp.Popen(args, stdout=stdout, stderr=stderr)
     #std = os.waitpid(p.pid, 0)
     if IO is True:
+        p = sp.Popen(args, stdout=stdout, stderr=stderr)
         (stdout, stderr) = p.communicate()
         #p.terminate()
         return stdout, stderr
     else:
-        #p.terminate()
+        p = sp.Popen(args, stdout=stdout, stderr=stderr).wait()
         return
 def gen_file(filepath, Atype, charge, skel):
     top = open(filepath, 'w')
@@ -50,26 +51,29 @@ def gen_file(filepath, Atype, charge, skel):
     top.write(output)
     top.close()
     return
-def monitor_jobs(jobids, delay=60):
+def jobids(qstat_str):
+    return [re.sub(r'(^\d+.lc5).*',r'\1',line) for line in qstat_str.split('\n') if re.match(r'^\d+\.lc5',line) is not None]
+    
+def monitor_jobs(jobs, delay=60):
     #Querey the clutser's job id's until all jobs complete
     #Accepts the list of job id's
     all_done = False
     while not all_done:
         (jobout,errout) = runsh(basessh + 'qstat -u ln8dc', IO=True)
         #Process each line, grabbing only the lc5 from the lines
-        alllines = [re.sub(r'(^\d+.lc5).*',r'\1',line) for line in jobout.split('\n') if re.match(r'^\d+\.lc5',line) is not None]
+        alllines = jobids(jobout)
         jobsdone= []
-        for job in jobids:
+        for job in jobs:
             if not job in alllines:
                 jobsdone.append(job)
         for job in jobsdone:
-            jobids.remove(job)
-        if len(jobids) == 0:
+            jobs.remove(job)
+        if len(jobs) == 0:
             all_done=True
             break
         else:
             #print "The following jobs are still running:"
-            #print jobids
+            #print jobs
             sleep(delay)
     return
             
@@ -99,27 +103,65 @@ def iterate(continuation=True, start=None):
         sleep(8)
         #Monitor for job completion
         monitor_jobs(lstout)
+        #Cleanup
+        runsh(basessh + 'rm /bigtmp/ln8dc/ljsphere_es/equilibrate*')
+        start = None
     if start is None or start == 'production':
         #3) Run the production of the new states
         #    3a) Wait on NEW states
         #Start the execution of production
         (out, err) = runsh(basessh + 'sh /home/ln8dc/ljspherespace/submit_lj_esq.sh {0:d} {1:d}'.format(old_nlj, nlj-1), IO=True) #Generates the skelton script
-        lstout = [re.sub(r'(^\d+.lc5).*',r'\1',line) for line in out.split('\n') if re.match(r'^\d+\.lc5',line) is not None]
+        lstout = jobids(out)
         #Add a delay to make sure the jobs make it to the que (~5-10 seconds seems to be enough)
         sleep(8)
         #Monitor for job completion
         monitor_jobs(lstout)
-    #4) Old States: Run the kln through the new states
-    #5) After new prod is done...
-    #6) Find g_t for all new states
-    #7) Subsample new states with the g_t
-    #8) Rerun new states
-    #    8a) Run new states through kln ALL states (old and new)
-    #    8b) Run new states through rep
-    #    8c) Run new states through null
-    #    8d) Run new states through q/q2
-    #9) Copy xvg files from ALL states to Fl
-    #    9a) Copy all files to argon
+        start = None
+    if start is None or start =='g_t':
+        #6) Find g_t for all new states
+        runsh(basessh + '\"cd /home/ln8dc/ljspherespace; python /home/ln8dc/ljspherespace/find_g_t.py {0:d} {1:d}\"'.format(old_nlj,nlj))
+        start = None
+    if start is None or start == 'subsample':
+        #7) Subsample new states with the g_t
+        (subout, suberr) = runsh(basessh + '\"cd /home/ln8dc/ljspherespace; sh /home/ln8dc/ljspherespace/submit_subsample.sh {0:d} {1:d}\"'.format(old_nlj,nlj-1), IO=True)
+        sleep(8)
+        lstout = jobids(subout)
+        monitor_jobs(lstout)
+        start = None
+    if start is None or start == 'kln':
+        #4) Old States: Run the kln through the new states
+        basekln = '\"cd /home/ln8dc/ljspherespace; sh /home/ln8dc/ljspherespace/submit_optrerun_esq.sh FLAGS\"'
+        flagstr = '-lk {lk:d} -uk {uk:d} -ll {ll:d} -ul {ul:d} {tpr:s} {submit:s} {kln:s} {null:s} {qq2:s} {rep:s}'
+        if not continuation:
+            oldflags = {'lk':0, 'uk':nlj-1, 'll':old_nlj, 'ul':nlj-1, 'tpr':'--tpr', 'submit':'--submit', 'kln':'--kln', 'null':'--null', 'qq2':'--qq2', 'rep':'--rep'}
+        else:
+            oldflags = {'lk':0, 'uk':old_nlj-1, 'll':old_nlj, 'ul':nlj-1, 'tpr':'--tpr', 'submit':'--submit', 'kln':'--kln', 'null':'', 'qq2':'', 'rep':''}
+        (oldout, olderr) = runsh(basessh + basekln.replace('FLAGS',flagstr.format(**oldflags)), IO=True)
+        if continuation:
+            #8) Rerun new states
+            #    8a) Run new states through kln ALL states (old and new)
+            #    8b) Run new states through rep
+            #    8c) Run new states through null
+            #    8d) Run new states through q/q2
+            newflags = {'lk':old_nlj, 'uk':nlj-1, 'll':0, 'ul':nlj-1, 'tpr':'--tpr', 'submit':'--submit', 'kln':'--kln', 'null':'--null', 'qq2':'--qq2', 'rep':'--rep'}
+            (newout, newerr) = runsh(basessh + basekln.replace('FLAGS',flagstr.format(**newflags)), IO=True)
+        else:
+            newout = ''
+            newerr = ''
+        totalout = oldout + '\n' + newout
+        klnids = jobids(totalout)
+        sleep(8)
+        monitor_jobs(klnids)
+        start = None
+    if start is None or start == 'xvgcopy':
+        #9) Copy xvg files from ALL states to Fl
+        #    9a) Copy all files to argon
+        xvgflags='--exclude="*.top" --include="lj*" --include="prod" --include="*.xvg" --exclude="*" '
+        basersync = 'rsync "-e ssh -i /home/ln8dc/.ssh/fluorinekey" -rv ' #required space
+        cmd = basersync + xvgflags + ' fir.itc.virginia.edu:/bigtmp/ln8dc/ljsphere_es/.' + ' .' #Grab xvg files from bigtmp and move them here
+        args = shlex.split(cmd)
+        p = sp.Popen(args, stdout=sp.PIPE, stderr=sp.PIPE, shell=False).wait()
+        start=None
     #10) Update esq_construct_ukln.py with the parameters from the new states
     #    10a) Update nstates
     #    10b) Use excel sheet as needed
@@ -129,11 +171,11 @@ def iterate(continuation=True, start=None):
         #    11a) Generate the movie
         #    11c) Find the resample points
         #Run the main crunch script
-        construct_ukln(nlj, qs, es, ss)
+        construct_ukln.execute(nlj, qs, es, ss)
         newresamp = numpy.load('resamp_points_n{0:d}'.format(nlj))
         qs = numpy.append(qs, newresamp[:,0])
         es = numpy.append(es, newresamp[:,1])
-        ss = numpy.append(ss, newresamp[:,0])
+        ss = numpy.append(ss, newresamp[:,2])
         new_nlj = len(qs)
         numpy.save('old_new_nlj.npy', numpy.array([nlj, new_nlj]))
         nlj=new_nlj
@@ -145,6 +187,7 @@ def iterate(continuation=True, start=None):
         numpy.savetxt('qes.txt', newparm)
         #12) Generate new C6/C12
         C6, C12 = C6_C12(es,ss)
+        start = None
     #14) Update the new states on the skeleton generator/copier
     if start is None or start == 'topology':
         #~~Generate Topologies~~
@@ -204,7 +247,7 @@ def iterate(continuation=True, start=None):
 if __name__ == "__main__":
     continuation = False
     iterations = 1
-    startfrom = 'equilibrate'
+    startfrom = 'free energy'
     for i in xrange(iterations):
         iterate(continuation=continuation, start=startfrom)
         continuation = True #REQUIRED, ensures init parms are never processed more than once
