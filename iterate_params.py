@@ -86,7 +86,7 @@ def iterate(continuation=True, start=None):
         old_nlj = 0
     else:
         parms = numpy.load('qes.npy')
-        (oldnlj, newnlj) = numpy.load('old_new_nlj.npy')
+        (old_nlj, newnlj) = numpy.load('old_new_nlj.npy')
     qs = parms[:,0]
     es = parms[:,1]
     ss = parms[:,2]
@@ -94,6 +94,8 @@ def iterate(continuation=True, start=None):
     C6, C12 = C6_C12(es,ss)
     #Initilization which will start 
     if start is None or start == 'equilibrate':
+        print "Equilibrating"
+        runsh(basessh + 'sh /home/ln8dc/ljspherespace/copy_skel.sh {0:d}'.format(nlj-1)) #Generates the skelton script
         #2) Run the Equilibration of new states
         #    2a) Wait
         #Start the execution of jobs
@@ -107,6 +109,7 @@ def iterate(continuation=True, start=None):
         runsh(basessh + 'rm /bigtmp/ln8dc/ljsphere_es/equilibrate*')
         start = None
     if start is None or start == 'production':
+        print "Production Simulation"
         #3) Run the production of the new states
         #    3a) Wait on NEW states
         #Start the execution of production
@@ -118,10 +121,12 @@ def iterate(continuation=True, start=None):
         monitor_jobs(lstout)
         start = None
     if start is None or start =='g_t':
+        print "Measuring Timeseries"
         #6) Find g_t for all new states
         runsh(basessh + '\"cd /home/ln8dc/ljspherespace; python /home/ln8dc/ljspherespace/find_g_t.py {0:d} {1:d}\"'.format(old_nlj,nlj))
         start = None
     if start is None or start == 'subsample':
+        print "Subsampling"
         #7) Subsample new states with the g_t
         (subout, suberr) = runsh(basessh + '\"cd /home/ln8dc/ljspherespace; sh /home/ln8dc/ljspherespace/submit_subsample.sh {0:d} {1:d}\"'.format(old_nlj,nlj-1), IO=True)
         sleep(8)
@@ -129,6 +134,7 @@ def iterate(continuation=True, start=None):
         monitor_jobs(lstout)
         start = None
     if start is None or start == 'kln':
+        print "Rerunning"
         #4) Old States: Run the kln through the new states
         basekln = '\"cd /home/ln8dc/ljspherespace; sh /home/ln8dc/ljspherespace/submit_optrerun_esq.sh FLAGS\"'
         flagstr = '-lk {lk:d} -uk {uk:d} -ll {ll:d} -ul {ul:d} {tpr:s} {submit:s} {kln:s} {null:s} {qq2:s} {rep:s}'
@@ -152,8 +158,11 @@ def iterate(continuation=True, start=None):
         klnids = jobids(totalout)
         sleep(8)
         monitor_jobs(klnids)
+        #Cleanup
+        runsh(basessh + 'rm /bigtmp/ln8dc/ljsphere_es/rerun*')
         start = None
     if start is None or start == 'xvgcopy':
+        "Moving XVG Files"
         #9) Copy xvg files from ALL states to Fl
         #    9a) Copy all files to argon
         xvgflags='--exclude="*.top" --include="lj*" --include="prod" --include="*.xvg" --exclude="*" '
@@ -166,13 +175,13 @@ def iterate(continuation=True, start=None):
     #    10a) Update nstates
     #    10b) Use excel sheet as needed
     if start is None or start == 'free energy':
-        pdb.set_trace()
+        print "Computing Free Energy"
         #11) Run esq_construct_ukln.py to determine basis functions, free energies
         #    11a) Generate the movie
         #    11c) Find the resample points
         #Run the main crunch script
         construct_ukln.execute(nlj, qs, es, ss)
-        newresamp = numpy.load('resamp_points_n{0:d}'.format(nlj))
+        newresamp = numpy.load('resamp_points_n{0:d}.npy'.format(nlj))
         qs = numpy.append(qs, newresamp[:,0])
         es = numpy.append(es, newresamp[:,1])
         ss = numpy.append(ss, newresamp[:,2])
@@ -190,6 +199,7 @@ def iterate(continuation=True, start=None):
         start = None
     #14) Update the new states on the skeleton generator/copier
     if start is None or start == 'topology':
+        print "Generating Topologies"
         #~~Generate Topologies~~
         skeltop = open('ljspheres_esq_skel.top').read()
         replacestr = ''
@@ -230,7 +240,6 @@ def iterate(continuation=True, start=None):
         #15) Run the skeleton generator and copier
             topoflags='--include="lj*" --include="*.top" --exclude="*" '
             rsync('/home/ln8dc/simulations/ion-parameters/lj{0:d}'.format(i), direction='to', flags='-rv '+topoflags) #Creates folder and sends topologies.
-        runsh(basessh + 'sh /home/ln8dc/ljspherespace/copy_skel.sh {0:d}'.format(nlj-1)) #Generates the skelton script
     #16) Repeat from Step 2
 
 
@@ -245,9 +254,10 @@ def iterate(continuation=True, start=None):
     
 
 if __name__ == "__main__":
-    continuation = False
-    iterations = 1
-    startfrom = 'free energy'
+    continuation = True
+    iterations = 8
+    #startfrom = 'free energy'
+    startfrom = None
     for i in xrange(iterations):
         iterate(continuation=continuation, start=startfrom)
         continuation = True #REQUIRED, ensures init parms are never processed more than once

@@ -4,6 +4,7 @@ from numpy import ma
 from scipy.integrate import simps
 from scipy import linspace
 from scipy import logspace
+from scipy import ndimage
 import scipy.optimize
 import matplotlib.pyplot as plt
 import os.path
@@ -765,8 +766,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     This section will be used to identify where extra sampling should be done. optional flag set at the start of this section
     '''
     id_regions = True
-    if id_regions:
-        from scipy import ndimage
+    if id_regions and not os.path.isfile('resamp_points_n%i.npy'%nstates):
         err_threshold = 0.5 #kcal/mol
         #Filter data. notouch masks covers the sections we are not examining. touch is the sections we want
         mdDelF_notouch = ma.masked_less(dDelF, err_threshold)
