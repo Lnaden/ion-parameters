@@ -27,7 +27,7 @@ def rsync(files, dest='.', flags=None, direction='to'):
     else:
         cmd = basersenc + ' fir.itc.virginia.edu:/home/ln8dc/ljspherespace/{0}'.format(dest) + files + ' .'
     args = shlex.split(cmd)
-    p = sp.Popen(args, stdout=sp.PIPE, stderr=sp.PIPE, shell=False).wait()
+    p = sp.Popen(args, stdout=sp.PIPE, stderr=sp.PIPE, shell=False).communicate()
     #(stdout, stderr) = p.communicate()
     return
 def runsh(cmdstr, IO=False, delay=0.2, stdout=sp.PIPE, stderr=sp.PIPE):
@@ -40,7 +40,7 @@ def runsh(cmdstr, IO=False, delay=0.2, stdout=sp.PIPE, stderr=sp.PIPE):
         #p.terminate()
         return stdout, stderr
     else:
-        p = sp.Popen(args, stdout=stdout, stderr=stderr).wait()
+        p = sp.Popen(args, stdout=stdout, stderr=stderr).communicate()
         return
 def gen_file(filepath, Atype, charge, skel):
     top = open(filepath, 'w')
@@ -162,14 +162,14 @@ def iterate(continuation=True, start=None):
         runsh(basessh + 'rm /bigtmp/ln8dc/ljsphere_es/rerun*')
         start = None
     if start is None or start == 'xvgcopy':
-        "Moving XVG Files"
+        print "Moving XVG Files"
         #9) Copy xvg files from ALL states to Fl
         #    9a) Copy all files to argon
         xvgflags='--exclude="*.top" --include="lj*" --include="prod" --include="*.xvg" --exclude="*" '
         basersync = 'rsync "-e ssh -i /home/ln8dc/.ssh/fluorinekey" -rv ' #required space
         cmd = basersync + xvgflags + ' fir.itc.virginia.edu:/bigtmp/ln8dc/ljsphere_es/.' + ' .' #Grab xvg files from bigtmp and move them here
         args = shlex.split(cmd)
-        p = sp.Popen(args, stdout=sp.PIPE, stderr=sp.PIPE, shell=False).wait()
+        p = sp.Popen(args, stdout=sp.PIPE, stderr=sp.PIPE, shell=False).communicate()
         start=None
     #10) Update esq_construct_ukln.py with the parameters from the new states
     #    10a) Update nstates
@@ -256,8 +256,8 @@ def iterate(continuation=True, start=None):
 if __name__ == "__main__":
     continuation = True
     iterations = 8
-    #startfrom = 'free energy'
     startfrom = None
+    startfrom = 'free energy'
     for i in xrange(iterations):
         iterate(continuation=continuation, start=startfrom)
         continuation = True #REQUIRED, ensures init parms are never processed more than once
