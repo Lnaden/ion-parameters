@@ -19,6 +19,9 @@ import datetime
 import sys
 from mpl_toolkits.mplot3d import axes3d
 import timeseries
+import dbscan
+import scipy.sparse as sparse
+import scipy.sparse.csgraph as csgraph
 
 kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 T = 298 * units.kelvin
@@ -766,6 +769,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     This section will be used to identify where extra sampling should be done. optional flag set at the start of this section
     '''
     id_regions = True
+    #Set the region id method, lloyd or dbscan
+    idmethod = 'dbscan'
     if id_regions and not os.path.isfile('resamp_points_n%i.npy'%nstates):
         err_threshold = 0.5 #kcal/mol
         #Filter data. notouch masks covers the sections we are not examining. touch is the sections we want
@@ -777,108 +782,143 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         features = numpy.zeros(dDelF.shape, dtype=numpy.int32)
         features[regions] = 1 #Define features
         #Define the features of the array by assigning labels
-        test_struct = numpy.ones([3,3,3])
-        feature_labels, num_features = ndimage.measurements.label(features)
-        test_feature_labels, test_num_features = ndimage.measurements.label(features, structure=test_struct)
-        """
-        Important note:
-        Labels of 0 in the feature_label arrays are not actually features! they are the background, so all looping will need to be done over the other indices
-        """
-        coms = numpy.zeros([num_features,3]) #Create the center of mass arrays
-        maxes = numpy.zeros(coms.shape)
-        maxes_esq = numpy.zeros(coms.shape)
-        coms_esq = numpy.zeros(coms.shape) # q, epsi, and sig com
-        test_coms = numpy.zeros([num_features,3]) #Create the center of mass arrays
-        test_coms_esq = numpy.zeros(coms.shape) # q, epsi, and sig com
-        for i in range(num_features):
-           index = i + 1 #convert my counter to the feature index
-           coms[i,:] = ndimage.measurements.center_of_mass(dDelF, feature_labels, index=index) #compute center of mass for each 
-           test_coms[i,:] = ndimage.measurements.center_of_mass(dDelF, test_feature_labels, index=index) #compute center of mass for each 
-           maxes[i,:] = ndimage.measurements.maximum_position(dDelF, feature_labels, index=index)
-           #Compute the corrisponding q, epsi, and sig from each com
-           fraction_along = coms[i,:] / Nparm
-           test_fraction_along = test_coms[i,:] / Nparm
-           coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
-           coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
-           coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
-           test_coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*test_fraction_along[0]
-           test_coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*test_fraction_along[1]
-           test_coms_esq[i,2] = sigStartSpace + (sigEndSpace-sigStartSpace)*test_fraction_along[2]
-           maxes_esq[i,0] = q_range[maxes[i,0]]
-           maxes_esq[i,1] = epsi_range[maxes[i,1]]
-           maxes_esq[i,2] = sig_range[maxes[i,2]]
-        print "Center of the %i regions with errors larger than %f kcal/mol" % (num_features, err_threshold)
-        print "in units of  q, kJ/mol, and nm"
-        print "Charge -- Epsilon -- Sigma"
-        print coms_esq
-        print "With test Structure"
-        print test_coms_esq
-        #Determine size of each feature to figure out which should have more
-        resample_tol = 0.15
-        #!!!
-        #Convert to broader test structure
-        num_features = test_num_features
-        feature_labels = test_feature_labels
-        resample_tol = 0.30
-        #end!!!
-        Nresample = numpy.zeros(num_features, dtype=numpy.int32)
-        Nsize = numpy.zeros(num_features, dtype=numpy.int32)
-        for i in range(num_features):
-            index = i + 1 #Convert to index
-            Nsize[i] = numpy.where(feature_labels == index)[0].shape[0]
-        #Points will be distributed with the following rules:
-        # The pecent of points from each feature will be identified
-        # There will be a finite number of points to add per distribution (10)
-        # Pecrent of points in each feature will be converted to decipercent 34% = 3.4 deci%
-        # Starting with the largest cluster (highest %) then in decending order, alternate celing and floor with deci%
-        # The celing/floor will be the # of points distributed to that cluster
-        # Points will be distriubed until we run out!
-        ndistrib = 10 # Number of poitns to distribute
-        percentSize = Nsize/float(Nsize.sum()) #Generate percentages
-        deciPercents = percentSize * 10 #Convert to deciPercent (e.g. 0.34 = 34% = 3.4 deci%)
-        sortedNdxMaxMin = numpy.argsort(deciPercents)[::-1] #Figure out which has the max
-        updown = numpy.ceil
-        pointsleft = ndistrib
-        for index in sortedNdxMaxMin:
-            pointsToGive = updown(deciPercents[index])
-            if pointsToGive <= pointsleft:
-                Nresample[index] = pointsToGive
-                pointsleft -= pointsToGive
-            elif pointsToGive > pointsleft and pointsleft != 0:
-                Nresample[index] = pointsleft
-                pointsleft -= pointsleft
-            else:
-                Nresample[index] = 0
-            if updown is numpy.ceil:
-                updown = numpy.floor
-            else:
-               updown = numpy.ceil 
-        #Nresample[Nsize/float(Nsize.sum()) > resample_tol] = 3 #Resample at > 30% of the total points
-        #Nresamp_total = Nresample.sum()
-        resamp_points = numpy.zeros([Nresample.sum(), 3])
-        closest_interiors = numpy.zeros(resamp_points.shape)
-        #Tesalate over where multiple samples are needed based on k-clustering Lloyd's algorithm
-        #pdb.set_trace()
-        resamp_counter = 0
-        for i in xrange(num_features):
-            index = i + 1 #Convert to index
-            #if Nresample[i] > 1:
-            if Nresample[i] > 0:
-                feature_indices = numpy.transpose(numpy.array(numpy.where(feature_labels==index))) #Creates a NxD matrix where N=feature.size
-                #feature_indices = numpy.where(feature_labels==i)
-                mu, clusters = find_centers(feature_indices, Nresample[i], dDelF)
-                for n in range(Nresample[i]):
-                    fraction_along = mu[n] / Nparm
-                    resamp_points[resamp_counter,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
-                    resamp_points[resamp_counter,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
-                    resamp_points[resamp_counter,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
-                    resamp_counter += 1
-                    #closest_interiors = closest_index(mu[n], feature_labels, i)
-            #else:
-                #Comment out to ignore these for weaker features
-                #resamp_points[resamp_counter,:] = coms_esq[i,:]
-                #resamp_counter += 1
-                
+        if idmethod is 'lloyd':
+            test_struct = numpy.ones([3,3,3])
+            feature_labels, num_features = ndimage.measurements.label(features)
+            test_feature_labels, test_num_features = ndimage.measurements.label(features, structure=test_struct)
+            """
+            Important note:
+            Labels of 0 in the feature_label arrays are not actually features! they are the background, so all looping will need to be done over the other indices
+            """
+            coms = numpy.zeros([num_features,3]) #Create the center of mass arrays
+            maxes = numpy.zeros(coms.shape)
+            maxes_esq = numpy.zeros(coms.shape)
+            coms_esq = numpy.zeros(coms.shape) # q, epsi, and sig com
+            test_coms = numpy.zeros([num_features,3]) #Create the center of mass arrays
+            test_coms_esq = numpy.zeros(coms.shape) # q, epsi, and sig com
+            for i in range(num_features):
+               index = i + 1 #convert my counter to the feature index
+               coms[i,:] = ndimage.measurements.center_of_mass(dDelF, feature_labels, index=index) #compute center of mass for each 
+               test_coms[i,:] = ndimage.measurements.center_of_mass(dDelF, test_feature_labels, index=index) #compute center of mass for each 
+               maxes[i,:] = ndimage.measurements.maximum_position(dDelF, feature_labels, index=index)
+               #Compute the corrisponding q, epsi, and sig from each com
+               fraction_along = coms[i,:] / Nparm
+               test_fraction_along = test_coms[i,:] / Nparm
+               coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
+               coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
+               coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
+               test_coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*test_fraction_along[0]
+               test_coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*test_fraction_along[1]
+               test_coms_esq[i,2] = sigStartSpace + (sigEndSpace-sigStartSpace)*test_fraction_along[2]
+               maxes_esq[i,0] = q_range[maxes[i,0]]
+               maxes_esq[i,1] = epsi_range[maxes[i,1]]
+               maxes_esq[i,2] = sig_range[maxes[i,2]]
+            print "Center of the %i regions with errors larger than %f kcal/mol" % (num_features, err_threshold)
+            print "in units of  q, kJ/mol, and nm"
+            print "Charge -- Epsilon -- Sigma"
+            print coms_esq
+            print "With test Structure"
+            print test_coms_esq
+            #Determine size of each feature to figure out which should have more
+            resample_tol = 0.15
+            #!!!
+            #Convert to broader test structure
+            num_features = test_num_features
+            feature_labels = test_feature_labels
+            resample_tol = 0.30
+            #end!!!
+            Nresample = numpy.zeros(num_features, dtype=numpy.int32)
+            Nsize = numpy.zeros(num_features, dtype=numpy.int32)
+            for i in range(num_features):
+                index = i + 1 #Convert to index
+                Nsize[i] = numpy.where(feature_labels == index)[0].shape[0]
+            #Points will be distributed with the following rules:
+            # The pecent of points from each feature will be identified
+            # There will be a finite number of points to add per distribution (10)
+            # Pecrent of points in each feature will be converted to decipercent 34% = 3.4 deci%
+            # Starting with the largest cluster (highest %) then in decending order, alternate celing and floor with deci%
+            # The celing/floor will be the # of points distributed to that cluster
+            # Points will be distriubed until we run out!
+            ndistrib = 10 # Number of poitns to distribute
+            percentSize = Nsize/float(Nsize.sum()) #Generate percentages
+            deciPercents = percentSize * 10 #Convert to deciPercent (e.g. 0.34 = 34% = 3.4 deci%)
+            sortedNdxMaxMin = numpy.argsort(deciPercents)[::-1] #Figure out which has the max
+            updown = numpy.ceil
+            pointsleft = ndistrib
+            for index in sortedNdxMaxMin:
+                pointsToGive = updown(deciPercents[index])
+                if pointsToGive <= pointsleft:
+                    Nresample[index] = pointsToGive
+                    pointsleft -= pointsToGive
+                elif pointsToGive > pointsleft and pointsleft != 0:
+                    Nresample[index] = pointsleft
+                    pointsleft -= pointsleft
+                else:
+                    Nresample[index] = 0
+                if updown is numpy.ceil:
+                    updown = numpy.floor
+                else:
+                   updown = numpy.ceil 
+            #Nresample[Nsize/float(Nsize.sum()) > resample_tol] = 3 #Resample at > 30% of the total points
+            #Nresamp_total = Nresample.sum()
+            resamp_points = numpy.zeros([Nresample.sum(), 3])
+            closest_interiors = numpy.zeros(resamp_points.shape)
+            #Tesalate over where multiple samples are needed based on k-clustering Lloyd's algorithm
+            #pdb.set_trace()
+            resamp_counter = 0
+            for i in xrange(num_features):
+                index = i + 1 #Convert to index
+                #if Nresample[i] > 1:
+                if Nresample[i] > 0:
+                    feature_indices = numpy.transpose(numpy.array(numpy.where(feature_labels==index))) #Creates a NxD matrix where N=feature.size
+                    #feature_indices = numpy.where(feature_labels==i)
+                    mu, clusters = find_centers(feature_indices, Nresample[i], dDelF)
+                    for n in range(Nresample[i]):
+                        fraction_along = mu[n] / Nparm
+                        resamp_points[resamp_counter,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
+                        resamp_points[resamp_counter,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
+                        resamp_points[resamp_counter,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
+                        resamp_counter += 1
+                        #closest_interiors = closest_index(mu[n], feature_labels, i)
+                #else:
+                    #Comment out to ignore these for weaker features
+                    #resamp_points[resamp_counter,:] = coms_esq[i,:]
+                    #resamp_counter += 1
+        elif idmethod is 'dbscan':
+            nP_per_path = 3
+            #Try to call up old vertices (neighborhood centers)
+            try:
+                vertices = numpy.load('vertices.npy')
+            except:
+                vertices = numpy.zeros([0,3])
+            scanner = dbscan.dbscan(features, dDelF)
+            #Find features
+            pdb.set_trace()
+            feature_labels, num_features = scanner.generate_neighborhoods()
+            coms = numpy.zeros([num_features,3]) #Create the center of mass arrays
+            for i in range(num_features):
+               index = i + 1 #convert my counter to the feature index
+               coms[i,:] = ndimage.measurements.center_of_mass(dDelF, feature_labels, index=index) #compute center of mass for each 
+               #Compute the corrisponding q, epsi, and sig from each com
+               fraction_along = coms[i,:] / Nparm
+               coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
+               coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
+               coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
+        #Create master vertex system for graph
+        vertices = numpy.concatenate((vertices,coms_esq))
+        numpy.save('vertices{0:d}.npy'.format(nstates), vertices) #Backups
+        numpy.save('vertices.npy', vertices)
+        #Generate the complete connectivity network
+        nv = vertices.shape[0]
+        lengths = numpy.zeros([nv,nv])
+        for v in xrange(nv):
+            for vj in xrange(v,nv):
+                lengths[v,vj] = numpy.sqrt(numpy.dot(vertices[v,:]**2,vertices[vj,:]**2))
+        #Compute the minium spanning tree
+        sparse_mst = csgraph.minnimum_spanning_tree(lengths)
+        mst = sparse_mst.toarray().astype(int)
+        
+
         numpy.savetxt('resamp_points_n%i.txt'%nstates, resamp_points)
         numpy.save('resamp_points_n%i.npy'%nstates, resamp_points)
         #Test: set the dDelF where there are not features to 0
@@ -1168,35 +1208,45 @@ if __name__ == "__main__":
     parser.add_option("--nstates", dest="nstates", default=None, help="Set the number of states", metavar="NSTATES")
     #nstate options: 24, 32, 40, 49
     (options, args) = parser.parse_args()
+    #if options.nstates is None:
+    #    nstates = 21
+    #else:
+    #    nstates = options.nstates
+    ##epsi_samp_space = numpy.array([0.100, 6.960, 2.667, 1.596, 1.128, 0.870, 0.706, 0.594, 0.513, 0.451, 0.40188])
+    ##sig_samp_space = numpy.array([0.25000, 0.41677, 0.58856, 0.72049, 0.83175, 0.92978, 1.01843, 1.09995, 1.17584, 1.24712, 1.31453])
+    ##!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ##This is the true sigma sampling space because I made a small math error when initially spacing 
+    ##                                0           1            2            3            4            5            6            7            8            9   10   11
+    #sig_samp_space = numpy.array([0.25, 0.57319535, 0.712053172, 0.811158734, 0.890612296, 0.957966253, 1.016984881, 1.069849165, 1.117949319, 1.162232374, 1.2, 0.3])
+    #epsi_samp_space = numpy.append(epsi_samp_space, 0.8)
+    ##Ions 12-25                                             12          13          14          15          16          17          18          19          20          21          22          23          24          25
+    #sig_samp_space  = numpy.append(sig_samp_space, [0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535])
+    #epsi_samp_space = numpy.append(epsi_samp_space,[      0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21])
+    ##Ions 26-35                                             26          27          28          29          30          31          32          33          34          35
+    #sig_samp_space  = numpy.append(sig_samp_space, [0.89830417, 0.89119881, 0.92340246, 0.89588727, 1.11223185, 1.11840500, 1.11239744, 1.10950395, 1.11391239, 0.87474864])
+    #epsi_samp_space = numpy.append(epsi_samp_space,[1.09793856, 3.02251958, 0.76784386, 1.91285202, 0.89731119, 0.64068812, 2.98142758, 2.66769708, 1.81440736, 2.76843218])
+    ##Ions 36-45                                             36           37           38           39           40           41           42           43           44           45          
+    #sig_samp_space  = numpy.append(sig_samp_space, [1.10602708, 0.867445388, 0.807577825, 0.881299638, 1.117410858, 1.113348358, 0.912443052, 0.804213494, 1.108191619, 1.105962702])
+    #epsi_samp_space = numpy.append(epsi_samp_space,[0.982771643, 2.997387823, 0.966241439, 1.852925855, 0.65263393, 1.818471648, 0.703674209, 2.706448907, 2.982717551, 2.71202082])
+    #
+    #
+    #sig3_samp_space = sig_samp_space**3
+    #
+    ##                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,      12,      13,      14,      15,      16,      17,      18,      19,      20,      21,      22,      23,      24,      25 
+    #q_samp_space    = numpy.array([  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0, -2.0000, -1.8516, -1.6903, -1.5119, -1.3093, -1.0690, -0.7559, +2.0000, +1.8516, +1.6903, +1.5119, +1.3093, +1.0690, +0.7559])
+    ##Ions 26-35                                     26      27      28      29       30      31      32       33      34       35
+    #q_samp_space = numpy.append(q_samp_space, [-1.1094, 1.1827, 1.1062, 1.1628, -1.2520, 1.2705, 1.2610, -1.2475, 1.2654, -1.1594])
+    ##Ions 36-45                                     36      37       38      39      40      41      42       43      44       45          
+    #q_samp_space = numpy.append(q_samp_space, [-0.6057, 1.3179, -0.4568, 1.3153, 1.3060, 1.2911, 1.3106, -0.5160, 1.2880, -0.6149])
+    #execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space)
+    ##!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    x = numpy.load('qes.npy')
+    qs = x[:,0]
+    es = x[:,1]
+    ss = x[:,2]
     if options.nstates is None:
-        nstates = 21
+        nstates = len(qs)
     else:
-        nstates = options.nstates
-    #epsi_samp_space = numpy.array([0.100, 6.960, 2.667, 1.596, 1.128, 0.870, 0.706, 0.594, 0.513, 0.451, 0.40188])
-    #sig_samp_space = numpy.array([0.25000, 0.41677, 0.58856, 0.72049, 0.83175, 0.92978, 1.01843, 1.09995, 1.17584, 1.24712, 1.31453])
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    #This is the true sigma sampling space because I made a small math error when initially spacing 
-    #                                0           1            2            3            4            5            6            7            8            9   10   11
-    sig_samp_space = numpy.array([0.25, 0.57319535, 0.712053172, 0.811158734, 0.890612296, 0.957966253, 1.016984881, 1.069849165, 1.117949319, 1.162232374, 1.2, 0.3])
-    epsi_samp_space = numpy.append(epsi_samp_space, 0.8)
-    #Ions 12-25                                             12          13          14          15          16          17          18          19          20          21          22          23          24          25
-    sig_samp_space  = numpy.append(sig_samp_space, [0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535])
-    epsi_samp_space = numpy.append(epsi_samp_space,[      0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21])
-    #Ions 26-35                                             26          27          28          29          30          31          32          33          34          35
-    sig_samp_space  = numpy.append(sig_samp_space, [0.89830417, 0.89119881, 0.92340246, 0.89588727, 1.11223185, 1.11840500, 1.11239744, 1.10950395, 1.11391239, 0.87474864])
-    epsi_samp_space = numpy.append(epsi_samp_space,[1.09793856, 3.02251958, 0.76784386, 1.91285202, 0.89731119, 0.64068812, 2.98142758, 2.66769708, 1.81440736, 2.76843218])
-    #Ions 36-45                                             36           37           38           39           40           41           42           43           44           45          
-    sig_samp_space  = numpy.append(sig_samp_space, [1.10602708, 0.867445388, 0.807577825, 0.881299638, 1.117410858, 1.113348358, 0.912443052, 0.804213494, 1.108191619, 1.105962702])
-    epsi_samp_space = numpy.append(epsi_samp_space,[0.982771643, 2.997387823, 0.966241439, 1.852925855, 0.65263393, 1.818471648, 0.703674209, 2.706448907, 2.982717551, 2.71202082])
-    
-    
-    sig3_samp_space = sig_samp_space**3
-    
-    #                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,      12,      13,      14,      15,      16,      17,      18,      19,      20,      21,      22,      23,      24,      25 
-    q_samp_space    = numpy.array([  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0, -2.0000, -1.8516, -1.6903, -1.5119, -1.3093, -1.0690, -0.7559, +2.0000, +1.8516, +1.6903, +1.5119, +1.3093, +1.0690, +0.7559])
-    #Ions 26-35                                     26      27      28      29       30      31      32       33      34       35
-    q_samp_space = numpy.append(q_samp_space, [-1.1094, 1.1827, 1.1062, 1.1628, -1.2520, 1.2705, 1.2610, -1.2475, 1.2654, -1.1594])
-    #Ions 36-45                                     36      37       38      39      40      41      42       43      44       45          
-    q_samp_space = numpy.append(q_samp_space, [-0.6057, 1.3179, -0.4568, 1.3153, 1.3060, 1.2911, 1.3106, -0.5160, 1.2880, -0.6149])
-    #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space)
+        nstates = int(options.nstates)
+    pdb.set_trace()
+    execute(nstates, qs, es, ss)
