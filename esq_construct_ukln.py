@@ -230,6 +230,21 @@ def subsample_series(series, g_t=None, return_g_t=False):
     else:
         return state_indices, transfer_series
 
+def esq_to_ndx(T, start, end, factor=1, N=51):
+    #Quick converter from transformed esq coordinate to effective ndx value
+    frac_along = (T**factor - start**factor)/(end**factor-start**factor)
+    return frac_along*(N-1)
+def cubemean(point, grid):
+    netmean = 0
+    px = point[0]
+    py = point[1]
+    pz = point[2]
+    for dx in [numpy.ceil, numpy.floor]:
+        for dy in [numpy.ceil, numpy.floor]:
+            for dz in [numpy.ceil, numpy.floor]:
+                gridpt = (dx(px), dy(py), dz(pz))
+                netmean += grid[gridpt] * numpy.linalg.norm(numpy.array(gridpt) - point)
+    return netmean/8
 
 class consts(object): #Class to house all constant information
 
@@ -888,37 +903,103 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             nP_per_path = 3
             #Try to call up old vertices (neighborhood centers)
             try:
+                #Find the saved vertices file
                 vertices = numpy.load('vertices.npy')
             except:
-                vertices = numpy.zeros([0,3])
+                #Fall back to only the reference state
+                vertices = numpy.zeros([1,3])
+                vertices[0,0] = q_samp_space[Ref_state]
+                vertices[0,1] = epsi_samp_space[Ref_state]
+                vertices[0,2] = sig_samp_space[Ref_state]
             scanner = dbscan.dbscan(features, dDelF)
             #Find features
-            pdb.set_trace()
+            #pdb.set_trace()
             feature_labels, num_features = scanner.generate_neighborhoods()
-            coms = numpy.zeros([num_features,3]) #Create the center of mass arrays
-            for i in range(num_features):
-               index = i + 1 #convert my counter to the feature index
-               coms[i,:] = ndimage.measurements.center_of_mass(dDelF, feature_labels, index=index) #compute center of mass for each 
-               #Compute the corrisponding q, epsi, and sig from each com
-               fraction_along = coms[i,:] / Nparm
-               coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
-               coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
-               coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
-        #Create master vertex system for graph
-        vertices = numpy.concatenate((vertices,coms_esq))
-        numpy.save('vertices{0:d}.npy'.format(nstates), vertices) #Backups
-        numpy.save('vertices.npy', vertices)
-        #Generate the complete connectivity network
-        nv = vertices.shape[0]
-        lengths = numpy.zeros([nv,nv])
-        for v in xrange(nv):
-            for vj in xrange(v,nv):
-                lengths[v,vj] = numpy.sqrt(numpy.dot(vertices[v,:]**2,vertices[vj,:]**2))
-        #Compute the minium spanning tree
-        sparse_mst = csgraph.minnimum_spanning_tree(lengths)
-        mst = sparse_mst.toarray().astype(int)
-        
-
+            vertex_index = [] #Store which cluster labels to make a vertex out of
+            fsize = numpy.zeros(num_features,dtype=int)
+            #Tabulate Features
+            for i in xrange(num_features):
+                index = i + 1
+                fsize[i] = numpy.where(feature_labels == index)[0].size
+            #Find features we care about
+            for i in xrange(num_features):
+                if fsize[i]/float(fsize.sum()) >= 0.1: #Feature larger than 10% of all non-background features
+                    vertex_index.append(i)
+            if len(vertex_index) == 0: #Check for only a whole bunch of small clusters
+                maxV = 3
+                nV = 0
+                for i in numpy.argsort(fsize)[::-1]: #Sort sizes from max to 
+                    try:
+                        #Add next largest cluster if possible
+                        vertex_index.append(i)
+                        nV += 1
+                        if nV >= maxV:
+                            break
+                    except: #Exception for no clusters available, break
+                        #This should only happen when fsize is 0 or something.
+                        break
+            Nnew_vertices = len(vertex_index)
+            coms = numpy.zeros([Nnew_vertices,3]) #Create the center of mass arrays
+            coms_esq = numpy.zeros(coms.shape) # q, epsi, and sig com
+            #Trap nan's
+            nandDelF = dDelF.copy()
+            nandDelF[numpy.isnan(dDelF)] = numpy.nanmax(dDelF)
+            for i in range(Nnew_vertices):
+                index = vertex_index[i] #convert my counter to the feature index
+                coms[i,:] = ndimage.measurements.center_of_mass(nandDelF, feature_labels, index=index) #compute center of mass for each 
+                #Compute the corrisponding q, epsi, and sig from each com
+                fraction_along = coms[i,:] / Nparm
+                coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
+                coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
+                coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
+            #Create master vertex system for graph
+            vertices = numpy.concatenate((vertices,coms_esq))
+            #numpy.save('vertices{0:d}.npy'.format(nstates), vertices) #Backups
+            #numpy.save('vertices.npy', vertices)
+            #Generate the complete connectivity network in upper triangle matrix
+            nv = vertices.shape[0]
+            lengths = numpy.zeros([nv,nv])
+            for v in xrange(nv):
+                for vj in xrange(v,nv):
+                    lengths[v,vj] = numpy.linalg.norm(vertices[v,:]-vertices[vj,:])
+            #Compute the minium spanning tree
+            sparse_mst = csgraph.minimum_spanning_tree(lengths)
+            #Convert to human-readable format
+            mst = sparse_mst.toarray()
+            #Generate the resample points, starting with the new vertices
+            resamp_points = coms_esq
+            nline = 51
+            line_frac = linspace(0,1,nline)
+            for v in xrange(nv):
+                for vj in xrange(v,nv):
+                    #Check if there is an Edge connecting the vertices
+                    if mst[v,vj] > 0:
+                        #Generate the Edge points
+                        edge = numpy.zeros([nline,3])
+                        edgendx = numpy.zeros([nline,3])
+                        edgedelF = numpy.zeros([nline])
+                        #Line is somewhat directional, 
+                        #but since I only care about "border" where the largest transition occurs
+                        #This problem resolves itself
+                        edge[:,0] = vertices[v,0] + (vertices[vj,0] - vertices[v,0])*line_frac
+                        edgendx[:,0] = esq_to_ndx(edge[:,0], qStartSpace, qEndSpace)
+                        edge[:,1] = vertices[v,1] + (vertices[vj,1] - vertices[v,1])*line_frac
+                        edgendx[:,1] = esq_to_ndx(edge[:,1], epsiStartSpace, epsiEndSpace)
+                        edge[:,2] = (vertices[v,2]**3 + (vertices[vj,2]**3 - vertices[v,2]**3)*line_frac)**(1.0/3)
+                        edgendx[:,2] = esq_to_ndx(edge[:,2], sigStartSpace, sigEndSpace, factor=3)
+                        #Determine the average "error" of each point based on proximity to the 8 cube points around it
+                        for point in xrange(nline):
+                            edgedelF[point] = cubemean(edgendx[point,:],dDelF)
+                        #Generate a laplace filter to find where the sudden change in edge is
+                        laplaceline = scipy.ndimage.filters.laplace(edgedelF)
+                        #Find the point where this change is the largest and add it to the resampled points
+                        boundaryline = int(numpy.nanargmax(laplaceline))
+                        new_point = edge[boundaryline,:]
+                        #Check to make sure its not in our points already (can happen with MST)
+                        #Added spaces to help readability comprehension
+                        if not numpy.any([   numpy.allclose(numpy.array([q_samp_space[i],epsi_samp_space[i],sig_samp_space[i]]), new_point)   for i in xrange(nstates)]):
+                            resamp_points = numpy.concatenate(resamp_points, new_point)
+        pdb.set_trace()
         numpy.savetxt('resamp_points_n%i.txt'%nstates, resamp_points)
         numpy.save('resamp_points_n%i.npy'%nstates, resamp_points)
         #Test: set the dDelF where there are not features to 0

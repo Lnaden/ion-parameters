@@ -1,7 +1,7 @@
 import numpy
 import scipy
 from sys import stdout
-
+import pdb
 
 '''
 Implementation of DBSCAN clustering algorithm for use with regular spaced data and weights
@@ -12,7 +12,7 @@ Returns a 3-dimension matrix of the same shape as the weight and feature matrix 
 '''
 
 class dbscan(object):
-    def __init__(self, feature_block, weights, tolerance=0.05, min_points=10):
+    def __init__(self, feature_block, weights, tolerance=0.1, min_points=5):
         self.feature = feature_block
         self.weights = weights
         self.dims = self.feature.shape
@@ -58,18 +58,19 @@ class dbscan(object):
         region = clusterset(pivot)
         #Cycle through each index +/-
         for dx in [-1,0,1]:
-            if pivot[0]+dx > 0 and pivot[0]+dx < self.dims[0]-1: #Check overbounds
+            if pivot[0]+dx >= 0 and pivot[0]+dx < self.dims[0]: #Check overbounds
                 for dy in [-1,0,1]:
-                    if pivot[1]+dy > 0 and pivot[1]+dy < self.dims[1]-1: #Check overbounds
+                    if pivot[1]+dy >= 0 and pivot[1]+dy < self.dims[1]: #Check overbounds
                         for dz in [-1,0,1]:
-                            if pivot[2]+dz > 0 and pivot[2]+dz < self.dims[2]-1: #Check overbounds
+                            if pivot[2]+dz >= 0 and pivot[2]+dz < self.dims[2]: #Check overbounds
                                 #Check if point is within relative error
                                 pshift = numpy.array([dx,dy,dz])
                                 pndx = pivot + pshift
                                 Wij = self.weights[tuple(pivot)]
                                 Pij = self.weights[tuple(pndx)]
                                 #Ensure its within high err region, and "close" in error
-                                if self.feature[tuple(pndx)] > 0 and self.relErr(Wij, Pij) <= self.tol:
+                                if self.feature[tuple(pndx)] > 0 and (self.relErr(Wij, Pij) <= self.tol or self.relErr(Pij, Wij) <= self.tol) and not numpy.array_equal(pndx, pivot):
+                                    #Omited self to prevent overcounting cluster
                                     region.add(pndx)
         return region.points
     def expandClusters(self, index, neighbors, clusterid):
@@ -81,7 +82,7 @@ class dbscan(object):
             if not self.visitation[tuple(neighbor)]:
                 self.visitation[tuple(neighbor)] = True
                 newneighbors = self.regionQuery(neighbor)
-                if newneighbors.shape[0] > self.min_points:
+                if newneighbors.shape[0] >= self.min_points:
                     neighbors = numpy.concatenate((neighbors, newneighbors))
             if self.neighborhoods[tuple(neighbor)] == 0:
                 self.neighborhoods[tuple(neighbor)] = clusterid
