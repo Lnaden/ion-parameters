@@ -994,8 +994,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
             #Create master vertex system for graph
             vertices = numpy.concatenate((vertices,coms_esq))
-            #numpy.save('vertices{0:d}.npy'.format(nstates), vertices) #Backups
-            #numpy.save('vertices.npy', vertices)
+            numpy.save('vertices{0:d}.npy'.format(nstates), vertices) #Backups
+            numpy.save('vertices.npy', vertices)
             #Generate the complete connectivity network in upper triangle matrix
             nv = vertices.shape[0]
             lengths = numpy.zeros([nv,nv])

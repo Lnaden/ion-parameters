@@ -254,9 +254,9 @@ def iterate(continuation=True, start=None):
     
 
 if __name__ == "__main__":
-    continuation = True
-    iterations = 8
-    startfrom = None
+    continuation = False
+    iterations = 10
+    #startfrom = None
     startfrom = 'free energy'
     for i in xrange(iterations):
         iterate(continuation=continuation, start=startfrom)
