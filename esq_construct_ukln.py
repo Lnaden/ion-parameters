@@ -234,17 +234,56 @@ def esq_to_ndx(T, start, end, factor=1, N=51):
     #Quick converter from transformed esq coordinate to effective ndx value
     frac_along = (T**factor - start**factor)/(end**factor-start**factor)
     return frac_along*(N-1)
+def ndx_to_esq(ndx, start, end, factor=1, N=51):
+    #Quick converter from transformed index to effective esq value
+    frac_along = ndx/(N-1)
+    esq = (start**factor + (end**factor-start**factor)*frac_along)**(1.0/factor)
+    return esq
+
+def check_ceilfloor(vfloor, vceil, N=51):
+    if vfloor == vceil:
+        if vceil == 0:
+            vceil += 1
+        else:
+            vfloor -= 1
+    return vfloor, vceil
+
 def cubemean(point, grid):
+    #Triliniear interpolation
     netmean = 0
     px = point[0]
     py = point[1]
     pz = point[2]
-    for dx in [numpy.ceil, numpy.floor]:
-        for dy in [numpy.ceil, numpy.floor]:
-            for dz in [numpy.ceil, numpy.floor]:
-                gridpt = (dx(px), dy(py), dz(pz))
-                netmean += grid[gridpt] * numpy.linalg.norm(numpy.array(gridpt) - point)
-    return netmean/8
+    grid_val = []
+    x0  = numpy.floor(px)
+    x1  = numpy.ceil(px)
+    x0,x1 = check_ceilfloor(x0,x1)
+    y0  = numpy.floor(py)
+    y1  = numpy.ceil(py)
+    y0,y1 = check_ceilfloor(y0,y1)
+    z0  = numpy.floor(pz)
+    z1  = numpy.ceil(pz)
+    z0,z1 = check_ceilfloor(z0,z1)
+    xd = float(px-x0)/(x1-x0)
+    yd = float(py-y0)/(y1-y0)
+    zd = float(pz-z0)/(z1-z0)
+    c00 = grid[x0,y0,z0]*(1-xd) + grid[x1,y0,z0]*xd
+    c10 = grid[x0,y1,z0]*(1-xd) + grid[x1,y1,z0]*xd
+    c01 = grid[x0,y0,z1]*(1-xd) + grid[x1,y0,z1]*xd
+    c11 = grid[x0,y1,z1]*(1-xd) + grid[x1,y1,z1]*xd
+    c0 = c00*(1-yd) + c10*yd
+    c1 = c01*(1-yd) + c11*yd
+    c = c0*(1-zd) + c1*zd
+    #for dx in [numpy.ceil, numpy.floor]:
+    #    for dy in [numpy.ceil, numpy.floor]:
+    #        for dz in [numpy.ceil, numpy.floor]:
+    #            gridpt = (dx(px), dy(py), dz(pz))
+    #            grid_points.append(numpy.array(gridpt))
+    #            grid_val.append(grid[gridpt])
+    #netmean = scipy.interpolate.interpn(grid_points, grid_val, point)
+
+    return c
+
 
 class consts(object): #Class to house all constant information
 
@@ -817,8 +856,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                test_coms[i,:] = ndimage.measurements.center_of_mass(dDelF, test_feature_labels, index=index) #compute center of mass for each 
                maxes[i,:] = ndimage.measurements.maximum_position(dDelF, feature_labels, index=index)
                #Compute the corrisponding q, epsi, and sig from each com
-               fraction_along = coms[i,:] / Nparm
-               test_fraction_along = test_coms[i,:] / Nparm
+               fraction_along = coms[i,:] / (Nparm-1)
+               test_fraction_along = test_coms[i,:] / (Nparm-1)
                coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
                coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
                coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
@@ -889,7 +928,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     #feature_indices = numpy.where(feature_labels==i)
                     mu, clusters = find_centers(feature_indices, Nresample[i], dDelF)
                     for n in range(Nresample[i]):
-                        fraction_along = mu[n] / Nparm
+                        fraction_along = mu[n] / (Nparm-1)
                         resamp_points[resamp_counter,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
                         resamp_points[resamp_counter,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
                         resamp_points[resamp_counter,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
@@ -920,18 +959,19 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             #Tabulate Features
             for i in xrange(num_features):
                 index = i + 1
+                #This excludes the 0 index (background)
                 fsize[i] = numpy.where(feature_labels == index)[0].size
             #Find features we care about
             for i in xrange(num_features):
                 if fsize[i]/float(fsize.sum()) >= 0.1: #Feature larger than 10% of all non-background features
-                    vertex_index.append(i)
+                    vertex_index.append(i+1) #Reaccount for excluding the 0 index
             if len(vertex_index) == 0: #Check for only a whole bunch of small clusters
                 maxV = 3
                 nV = 0
                 for i in numpy.argsort(fsize)[::-1]: #Sort sizes from max to 
                     try:
                         #Add next largest cluster if possible
-                        vertex_index.append(i)
+                        vertex_index.append(i+1)
                         nV += 1
                         if nV >= maxV:
                             break
@@ -948,7 +988,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 index = vertex_index[i] #convert my counter to the feature index
                 coms[i,:] = ndimage.measurements.center_of_mass(nandDelF, feature_labels, index=index) #compute center of mass for each 
                 #Compute the corrisponding q, epsi, and sig from each com
-                fraction_along = coms[i,:] / Nparm
+                fraction_along = coms[i,:] / (Nparm-1)
                 coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
                 coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
                 coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
@@ -959,9 +999,17 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             #Generate the complete connectivity network in upper triangle matrix
             nv = vertices.shape[0]
             lengths = numpy.zeros([nv,nv])
+            #Convert to index lengths on vertices before measuring lengths, this is the only places its needed
+            ndx_vertices = numpy.zeros(vertices.shape)
+            qSE = {'start':qStartSpace,'end':qEndSpace}
+            eSE = {'start':epsiStartSpace,'end':epsiEndSpace}
+            sSE = {'start':sigStartSpace,'end':sigEndSpace,'factor':1}
+            SEall = [qSE, eSE, sSE]
+            for dim in range(3):
+                ndx_vertices[:,dim] = esq_to_ndx(vertices[:,dim], **SEall[dim])
             for v in xrange(nv):
                 for vj in xrange(v,nv):
-                    lengths[v,vj] = numpy.linalg.norm(vertices[v,:]-vertices[vj,:])
+                    lengths[v,vj] = numpy.linalg.norm(ndx_vertices[v,:]-ndx_vertices[vj,:])
             #Compute the minium spanning tree
             sparse_mst = csgraph.minimum_spanning_tree(lengths)
             #Convert to human-readable format
@@ -991,15 +1039,16 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                         for point in xrange(nline):
                             edgedelF[point] = cubemean(edgendx[point,:],dDelF)
                         #Generate a laplace filter to find where the sudden change in edge is
-                        laplaceline = scipy.ndimage.filters.laplace(edgedelF)
+                        #laplaceline = scipy.ndimage.filters.laplace(edgedelF)
+                        laplaceline = scipy.ndimage.filters.sobel(edgedelF)
                         #Find the point where this change is the largest and add it to the resampled points
-                        boundaryline = int(numpy.nanargmax(laplaceline))
+                        boundaryline = int(numpy.nanargmax(numpy.abs(laplaceline)))
                         new_point = edge[boundaryline,:]
                         #Check to make sure its not in our points already (can happen with MST)
                         #Added spaces to help readability comprehension
                         if not numpy.any([   numpy.allclose(numpy.array([q_samp_space[i],epsi_samp_space[i],sig_samp_space[i]]), new_point)   for i in xrange(nstates)]):
-                            resamp_points = numpy.concatenate(resamp_points, new_point)
-        pdb.set_trace()
+                            #Cast new_point to the correct dims before appending
+                            resamp_points = numpy.concatenate((resamp_points, numpy.array([new_point])))
         numpy.savetxt('resamp_points_n%i.txt'%nstates, resamp_points)
         numpy.save('resamp_points_n%i.npy'%nstates, resamp_points)
         #Test: set the dDelF where there are not features to 0
