@@ -6,6 +6,7 @@ Ref_state = 1
 #Adjust this list to get your image, figure dynamicly updates
 nstates = [21, 31, 41, 51, 61]
 nstates = [47, 53]
+nstates = [21,69]
 
 def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     epsi_min = epsi_samp_space[0]
@@ -104,16 +105,28 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     for i in xrange(nplot):
         state = str(nstates[i])
         ### Main plot ###
-        imgFplot[state] = daplots[0,i].pcolormesh(sig_range, epsi_range, DelF[state][(Nparm-1)/2,:,:])
+        if nplot == 1:
+            imgFplot[state] = daplots[0].pcolormesh(sig_range, epsi_range, DelF[state][(Nparm-1)/2,:,:])
+        else:
+            imgFplot[state] = daplots[0,i].pcolormesh(sig_range, epsi_range, DelF[state][(Nparm-1)/2,:,:])
         if i == nplot-1:
-            divFplot = mal(daplots[0,i])
+            if nplot == 1:
+                divFplot = mal(daplots[0])
+            else:
+                divFplot = mal(daplots[0,i])
             caxFplot = divFplot.append_axes('right', size='5%', pad=0.05)
             cFplot = f.colorbar(imgFplot[state],cax=caxFplot)
         ### Error Plot ###
-        imgdFplot[state] = daplots[1,i].pcolormesh(sig_range, epsi_range, dDelF[state][(Nparm-1)/2,:,:])
+        if nplot == 1:
+            imgdFplot[state] = daplots[1].pcolormesh(sig_range, epsi_range, dDelF[state][(Nparm-1)/2,:,:])
+        else:
+            imgdFplot[state] = daplots[1,i].pcolormesh(sig_range, epsi_range, dDelF[state][(Nparm-1)/2,:,:])
         imgdFplot[state].set_clim(vmin=cdvmin, vmax=cdvmax)
         if i == nplot-1:
-            divdFplot = mal(daplots[1,i])
+            if nplot == 1:
+                divdFplot = mal(daplots[1])
+            else:
+                divdFplot = mal(daplots[1,i])
             caxdFplot = divdFplot.append_axes('right', size='5%', pad=0.05)
             cdFplot = f.colorbar(imgdFplot[state],cax=caxdFplot)
         #Format the static objects
@@ -129,7 +142,11 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
             ax.patch.set_color('grey')
         for i in xrange(nplot):
             state = nstates[i]
-            daplots[0,i].set_title(indi_title_template % state, fontsize = titlefontsize-1)
+            if nplot ==1:
+                #daplots[0].set_title(indi_title_template % state, fontsize = titlefontsize-1)
+                pass
+            else:
+                daplots[0,i].set_title(indi_title_template % state, fontsize = titlefontsize-1)
         f.subplots_adjust(hspace=0.02, wspace=0.05)
         f.text(0.05, .5, ylabel, rotation='vertical', horizontalalignment='center', verticalalignment='center', fontsize=18)
         f.text(0.5, .01, xlabel, horizontalalignment='center', verticalalignment='center', fontsize=18)
@@ -155,14 +172,20 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
             #Generate scrap figures
             for i in xrange(nplot):
                 state = str(nstates[i])
-                scrapFplot[state] = dascrap[0,i].pcolormesh(sig_range**sig_factor,epsi_range,DelF[state][qndx,:,:])
+                if nplot == 1:
+                    scrapFplot[state] = dascrap[0].pcolormesh(sig_range**sig_factor,epsi_range,DelF[state][qndx,:,:])
+                else:
+                    scrapFplot[state] = dascrap[0,i].pcolormesh(sig_range**sig_factor,epsi_range,DelF[state][qndx,:,:])
                 (curmin, curmax) = scrapFplot[state].get_clim()
                 #Determine limts on the DelF plot
                 if curmin < cmin:
                     cmin = curmin
                 if curmax > cmax:
                     cmax = curmax
-                scrapdFplot[state] = dascrap[1,i].pcolormesh(sig_range**sig_factor,epsi_range,dDelF[state][qndx,:,:], vmax=cdvmax, vmin=cdvmin)
+                if nplot == 1:
+                    scrapdFplot[state] = dascrap[1].pcolormesh(sig_range**sig_factor,epsi_range,dDelF[state][qndx,:,:], vmax=cdvmax, vmin=cdvmin)
+                else:
+                    scrapdFplot[state] = dascrap[1,i].pcolormesh(sig_range**sig_factor,epsi_range,dDelF[state][qndx,:,:], vmax=cdvmax, vmin=cdvmin)
             #Now that limts are known, apply them
             for i in xrange(nplot):
                 state = str(nstates[i])
