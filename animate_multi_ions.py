@@ -5,7 +5,7 @@ Ref_state = 1
 
 #Adjust this list to get your image, figure dynamicly updates
 nstates = [21, 31, 41, 51, 61]
-nstates = [21,  61]
+nstates = [47, 53]
 
 def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     epsi_min = epsi_samp_space[0]

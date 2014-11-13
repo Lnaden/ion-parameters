@@ -69,7 +69,7 @@ class dbscan(object):
                                 Wij = self.weights[tuple(pivot)]
                                 Pij = self.weights[tuple(pndx)]
                                 #Ensure its within high err region, and "close" in error
-                                if self.feature[tuple(pndx)] > 0 and (self.relErr(Wij, Pij) <= self.tol or self.relErr(Pij, Wij) <= self.tol) and not numpy.array_equal(pndx, pivot):
+                                if self.feature[tuple(pndx)] > 0 and (self.relErr(Wij, Pij) <= self.tol and self.relErr(Pij, Wij) <= self.tol) and not numpy.array_equal(pndx, pivot):
                                     #Omited self to prevent overcounting cluster
                                     region.add(pndx)
         return region.points

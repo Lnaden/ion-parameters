@@ -254,10 +254,11 @@ def iterate(continuation=True, start=None):
     
 
 if __name__ == "__main__":
-    continuation = False
-    iterations = 10
+    continuation = True
+    iterations = 2
     #startfrom = None
-    startfrom = 'free energy'
+    #startfrom = 'free energy'
+    startfrom = 'subsample'
     for i in xrange(iterations):
         iterate(continuation=continuation, start=startfrom)
         continuation = True #REQUIRED, ensures init parms are never processed more than once

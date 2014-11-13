@@ -171,6 +171,14 @@ def closest_index(point, features, index):
     distance = numpy.sqrt(numpy.sum(delta**2,axis = 0))
     minloc = numpy.where(distance == distance.min())
     return indices[:,minloc]
+def closest_point_with_index(point, features):
+    #Accepts a point of float "index" and finds the nearest integer index, returns the 
+    dims = features.shape
+    ndims = len(dims)
+    #Round the point
+    rpoint = numpy.around(point, out=numpy.zeros(ndims,dtype=int))
+    #Since the point should alway be on the interior, i should not have to worry about rounding
+    return rpoint, features[tuple(numpy.array(x) for x in rpoint)] #Cast the array to the correct index scheme to return single number not 3 slices of 2-dimensions
 
 def printFreeEnergy(DeltaF_ij, dDeltaF_ij):
     nstates = DeltaF_ij.shape[0]
@@ -825,6 +833,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     id_regions = True
     #Set the region id method, lloyd or dbscan
     idmethod = 'dbscan'
+    db_rand = True
     if id_regions and not os.path.isfile('resamp_points_n%i.npy'%nstates):
         err_threshold = 0.5 #kcal/mol
         #Filter data. notouch masks covers the sections we are not examining. touch is the sections we want
@@ -941,15 +950,21 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         elif idmethod is 'dbscan':
             nP_per_path = 3
             #Try to call up old vertices (neighborhood centers)
-            try:
-                #Find the saved vertices file
-                vertices = numpy.load('vertices.npy')
-            except:
-                #Fall back to only the reference state
-                vertices = numpy.zeros([1,3])
-                vertices[0,0] = q_samp_space[Ref_state]
-                vertices[0,1] = epsi_samp_space[Ref_state]
-                vertices[0,2] = sig_samp_space[Ref_state]
+            ###### Disabled for now #####
+            #try:
+            #    #Find the saved vertices file
+            #    vertices = numpy.load('vertices.npy')
+            #except:
+            #    #Fall back to only the reference state
+            #    vertices = numpy.zeros([1,3])
+            #    vertices[0,0] = q_samp_space[Ref_state]
+            #    vertices[0,1] = epsi_samp_space[Ref_state]
+            #    vertices[0,2] = sig_samp_space[Ref_state]
+            #############################
+            vertices = numpy.zeros([1,3])
+            vertices[0,0] = q_samp_space[Ref_state]
+            vertices[0,1] = epsi_samp_space[Ref_state]
+            vertices[0,2] = sig_samp_space[Ref_state]
             scanner = dbscan.dbscan(features, dDelF)
             #Find features
             #pdb.set_trace()
@@ -978,24 +993,58 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     except: #Exception for no clusters available, break
                         #This should only happen when fsize is 0 or something.
                         break
-            Nnew_vertices = len(vertex_index)
-            coms = numpy.zeros([Nnew_vertices,3]) #Create the center of mass arrays
-            coms_esq = numpy.zeros(coms.shape) # q, epsi, and sig com
-            #Trap nan's
-            nandDelF = dDelF.copy()
-            nandDelF[numpy.isnan(dDelF)] = numpy.nanmax(dDelF)
-            for i in range(Nnew_vertices):
-                index = vertex_index[i] #convert my counter to the feature index
-                coms[i,:] = ndimage.measurements.center_of_mass(nandDelF, feature_labels, index=index) #compute center of mass for each 
-                #Compute the corrisponding q, epsi, and sig from each com
-                fraction_along = coms[i,:] / (Nparm-1)
-                coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
-                coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
-                coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
             #Create master vertex system for graph
-            vertices = numpy.concatenate((vertices,coms_esq))
+            Nnew_vertices = len(vertex_index)
+            if db_rand:
+                #Randomly choose a point inside each region
+                new_points = numpy.zeros([Nnew_vertices,3])
+                new_points_esq = numpy.zeros(new_points.shape)
+                #Get the slices of each region
+                shapes = ndimage.find_objects(feature_labels)
+                for i in range(Nnew_vertices):
+                    index = vertex_index[i]
+                    shape_slices = shapes[index-1] # The features are in a list with the list index = feature # - 1
+                    pointfound = False
+                    while not pointfound:
+                        ndx_point = numpy.zeros(3)
+                        #Roll random numbers
+                        rng = numpy.random.rand(3)
+                        #assign an index based on top bottom
+                        for dim in range(3):
+                            start = int(shape_slices[dim].start)
+                            end = int(shape_slices[dim].stop) - 1 #Account for the fact that the end index is 1 larger than the available index's
+                            delta = end-start
+                            ndx_point[dim] = start + rng[dim]*delta
+                        #See what the closest index is
+                        rndx, near_ndx = closest_point_with_index(ndx_point, feature_labels)
+                        if near_ndx == index:
+                            pointfound = True
+                            new_points[i,:] = ndx_point
+                    fraction_along = new_points[i,:] / (Nparm-1)
+                    new_points_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
+                    new_points_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
+                    new_points_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
+                vertices = numpy.concatenate((vertices,new_points_esq))
+                resamp_points = new_points_esq
+            else:
+                #Vertex is the center of mass of the region
+                coms = numpy.zeros([Nnew_vertices,3]) #Create the center of mass arrays
+                coms_esq = numpy.zeros(coms.shape) # q, epsi, and sig com
+                #Trap nan's
+                nandDelF = dDelF.copy()
+                nandDelF[numpy.isnan(dDelF)] = numpy.nanmax(dDelF)
+                for i in range(Nnew_vertices):
+                    index = vertex_index[i] #convert my counter to the feature index
+                    coms[i,:] = ndimage.measurements.center_of_mass(nandDelF, feature_labels, index=index) #compute center of mass for each 
+                    #Compute the corrisponding q, epsi, and sig from each com
+                    fraction_along = coms[i,:] / (Nparm-1)
+                    coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
+                    coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
+                    coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
+                vertices = numpy.concatenate((vertices,coms_esq))
+                resamp_points = coms_esq
             numpy.save('vertices{0:d}.npy'.format(nstates), vertices) #Backups
-            numpy.save('vertices.npy', vertices)
+            #numpy.save('vertices.npy', vertices)
             #Generate the complete connectivity network in upper triangle matrix
             nv = vertices.shape[0]
             lengths = numpy.zeros([nv,nv])
@@ -1003,7 +1052,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             ndx_vertices = numpy.zeros(vertices.shape)
             qSE = {'start':qStartSpace,'end':qEndSpace}
             eSE = {'start':epsiStartSpace,'end':epsiEndSpace}
-            sSE = {'start':sigStartSpace,'end':sigEndSpace,'factor':1}
+            sSE = {'start':sigStartSpace,'end':sigEndSpace,'factor':3}
             SEall = [qSE, eSE, sSE]
             for dim in range(3):
                 ndx_vertices[:,dim] = esq_to_ndx(vertices[:,dim], **SEall[dim])
@@ -1014,10 +1063,11 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             sparse_mst = csgraph.minimum_spanning_tree(lengths)
             #Convert to human-readable format
             mst = sparse_mst.toarray()
+            #pdb.set_trace()
             #Generate the resample points, starting with the new vertices
-            resamp_points = coms_esq
             nline = 51
             line_frac = linspace(0,1,nline)
+            edgen = 0
             for v in xrange(nv):
                 for vj in xrange(v,nv):
                     #Check if there is an Edge connecting the vertices
@@ -1041,9 +1091,33 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                         #Generate a laplace filter to find where the sudden change in edge is
                         #laplaceline = scipy.ndimage.filters.laplace(edgedelF)
                         laplaceline = scipy.ndimage.filters.sobel(edgedelF)
+                        #f,(b,a) = plt.subplots(1,2)
+                        #a.plot(line_frac, laplaceline)
+                        #b.plot(line_frac, edgedelF)
+                        #a.set_title('Edge Detection\nTransform')
+                        #b.set_title(r'$\delta\Delta F$')
+                        #f.savefig('sorbel_edge{0:d}'.format(edgen), bbox_inches='tight')
+                        #edgen+=1
+                        #plt.show()
+                        #pdb.set_trace()
                         #Find the point where this change is the largest and add it to the resampled points
-                        boundaryline = int(numpy.nanargmax(numpy.abs(laplaceline)))
-                        new_point = edge[boundaryline,:]
+                        if db_rand and False: #Disabled for now
+                            #Find the point in the edge which has the maximum distance from its closest point
+                            #i.e. the closest point is further away than any other point's neighbors
+                            mindata = {'ndx':-1, 'mindist':0}
+                            for i in xrange(nline): #Go through each point in the edge
+                                #Set the slice array
+                                noti = numpy.ones(nline, dtype=bool)
+                                noti[i] = 0
+                                distset = numpy.abs(edgedelF[noti] - edgedelF[i]) #Take the distance btween every other point
+                                if distset.min() > mindata['mindist'] and edgedelF[i] > err_threshold : #If a new maximum minimum-distance is found, set it (must also be a region of uncertainty)
+                                    mindata['mindist'] = distset.min()
+                                    mindata['ndx'] = i
+                            #Assign the new point to be sampled
+                            new_point = edge[mindata['ndx'],:]
+                        else:
+                            boundaryline = int(numpy.nanargmax(numpy.abs(laplaceline)))
+                            new_point = edge[boundaryline,:]
                         #Check to make sure its not in our points already (can happen with MST)
                         #Added spaces to help readability comprehension
                         if not numpy.any([   numpy.allclose(numpy.array([q_samp_space[i],epsi_samp_space[i],sig_samp_space[i]]), new_point)   for i in xrange(nstates)]):
