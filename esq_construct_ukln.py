@@ -760,8 +760,9 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             estimated_finish_time = final_time + estimated_time_remaining
             print "Iteration took %.3f s." % elapsed_time
             print "Estimated completion in %s, at %s (consuming total wall clock time %s)." % (str(datetime.timedelta(seconds=estimated_time_remaining)), time.ctime(estimated_finish_time), str(datetime.timedelta(seconds=estimated_total_time)))
-            #Save a copy of just the Nparm**3 matrix in case I dont want to save a large number of files
-            savez('esq_freeEnergies%s.npz'%spacename, free_energy=DelF, dfree_energy=dDelF)
+            if not timekln:
+                #Save a copy of just the Nparm**3 matrix in case I dont want to save a large number of files
+                savez('esq_freeEnergies%s.npz'%spacename, free_energy=DelF, dfree_energy=dDelF)
     else:
         #if os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata: #Pull data from 
         if os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata: #Pull data from 

@@ -5,8 +5,8 @@ Ref_state = 1
 
 #Adjust this list to get your image, figure dynamicly updates
 nstates = [21, 31, 41, 51, 61]
-nstates = [47, 53]
 nstates = [21,69]
+nstates = [21]
 
 def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     epsi_min = epsi_samp_space[0]
@@ -130,10 +130,15 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
             caxdFplot = divdFplot.append_axes('right', size='5%', pad=0.05)
             cdFplot = f.colorbar(imgdFplot[state],cax=caxdFplot)
         #Format the static objects
-        sup_title_template = r'$\Delta G$ (top) and $\delta\Delta G$(bottom) with $q=%.2f$ for ions' + '\n in units of kcal/mol'
+        #sup_title_template = r'$\Delta G$ (top) and $\delta\Delta G$(bottom) with $q=%.2f$ for ions' + '\n in units of kcal/mol'
+        sup_title_template = r'$\Delta G$ (top) and $\delta\Delta G$(bottom) in units of kcal/mol'
         indi_title_template=r'%d sampled states'
         titlefontsize = 12
-        ftitle = f.suptitle('', fontsize = titlefontsize)
+        #ftitle = f.suptitle('', fontsize = titlefontsize)
+        #ftitle = f.suptitle(sup_title_template, fontsize = titlefontsize, horizontalalignment='right')
+        ftitle = f.suptitle(sup_title_template, fontsize = titlefontsize)
+        q_title_template = r"$q=%.2f$"
+        qtitle = f.text(0.85, 0.95, '', fontsize=20)
         for ax in daplots.ravel():
             ax.set_yscale(spacename)
             ax.set_xscale(spacename)
@@ -149,7 +154,7 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
                 daplots[0,i].set_title(indi_title_template % state, fontsize = titlefontsize-1)
         f.subplots_adjust(hspace=0.02, wspace=0.05)
         f.text(0.05, .5, ylabel, rotation='vertical', horizontalalignment='center', verticalalignment='center', fontsize=18)
-        f.text(0.5, .01, xlabel, horizontalalignment='center', verticalalignment='center', fontsize=18)
+        f.text(0.5, .03, xlabel, horizontalalignment='center', verticalalignment='center', fontsize=18)
         #Animate those figures!
         def cleanup():
             returnlist = []
@@ -158,8 +163,10 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
                 imgdFplot[key].set_array(numpy.array([]))
                 returnlist.append(imgFplot[key])
                 returnlist.append(imgdFplot[key])
-            ftitle.set_text('')
-            returnlist.append(ftitle)
+            #ftitle.set_text('')
+            #returnlist.append(ftitle)
+            qtitle.set_text('')
+            returnlist.append(qtitle)
             #Best way I can find to expand the dictionary to return the items
             return tuple(returnlist)
         def moveq(qndx):
@@ -198,8 +205,10 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
             for key in imgFplot.keys():
                 returnlist.append(imgFplot[key])
                 returnlist.append(imgdFplot[key])
-            ftitle.set_text(sup_title_template % q)
-            returnlist.append(ftitle)
+            #ftitle.set_text(sup_title_template % q)
+            #returnlist.append(ftitle)
+            qtitle.set_text(q_title_template % q)
+            returnlist.append(qtitle)
             return tuple(returnlist)
     
     #Call animation and save
@@ -208,7 +217,8 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     for state in nstates:
         statenames+=str(state) + '_'
     filename = 'Animated_Charge_%s_%s.mp4' % (statenames, errstr)
-    aniU = ani.FuncAnimation(f, moveq, range(Nparm), interval=150, blit=False, init_func=cleanup)
+    #aniU = ani.FuncAnimation(f, moveq, range(Nparm), interval=150, blit=False, init_func=cleanup)
+    aniU = ani.FuncAnimation(f, moveq, range(Nparm), interval=200, blit=False, init_func=cleanup)
     #pdb.set_trace()
     aniU.save(filename, dpi=400)
 

@@ -255,10 +255,10 @@ def iterate(continuation=True, start=None):
 
 if __name__ == "__main__":
     continuation = True
-    iterations = 2
+    iterations = 10
     #startfrom = None
     #startfrom = 'free energy'
-    startfrom = 'subsample'
+    startfrom = 'free energy'
     for i in xrange(iterations):
         iterate(continuation=continuation, start=startfrom)
         continuation = True #REQUIRED, ensures init parms are never processed more than once
