@@ -23,6 +23,10 @@ import dbscan
 import scipy.sparse as sparse
 import scipy.sparse.csgraph as csgraph
 
+"""
+Special module to constuct H and S from set data
+"""
+
 kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 T = 298 * units.kelvin
 kT = kB*T
@@ -685,16 +689,14 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #    niterations = len(comp.retained_indices)
     Ref_state = 1 #Reference state of sampling to pull from
     #pdb.set_trace()
-    if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata) or timekln: #nand gate +timing flag
+    if not (graphsfromfile) or not (os.path.isfile('hs_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata) or timekln: #nand gate +timing flag
         #Create numpy arrys: q, epsi, sig
         DelF = numpy.zeros([Nparm, Nparm, Nparm])
         dDelF = numpy.zeros([Nparm, Nparm, Nparm])
-        #f_k = comp.mbar.f_k
-        #f_k_sub = numpy.zeros(Nallstates)
-        #f_k_sub[:nstates] = f_k
-        #N_k = comp.mbar.N_k
-        #N_k_sub = numpy.zeros(Nallstates, numpy.int32)
-        #N_k_sub[:nstates] = N_k
+        DelU = numpy.zeros([Nparm, Nparm, Nparm])
+        dDelU = numpy.zeros([Nparm, Nparm, Nparm])
+        DelS = numpy.zeros([Nparm, Nparm, Nparm])
+        dDelS = numpy.zeros([Nparm, Nparm, Nparm])
         #Populate energies
         run_start_time = time.time()
         number_of_iterations = Nparm
@@ -713,7 +715,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             #Perturbed assumes all l states are unsampled
             u_kln_P = numpy.zeros([nstates,Nparm**2,maxN]) 
             #Save data files
-            if not (os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq)) and savedata) or timekln: #nand gate + timing flag
+            if not (os.path.isfile('hs_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq)) and savedata) or timekln: #nand gate + timing flag
                 for iepsi in xrange(Nparm):
                     epsi = epsi_range[iepsi]
                     #Create Sub matrix
@@ -733,15 +735,19 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 if not timekln:
                     #mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
                     #(DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-                    (DeltaF_ij, dDeltaF_ij) = comp.mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew-kab')
+                    (DeltaF_ij, dDeltaF_ij, DeltaU_ij, dDeltaU_ij, deltaS_ij, dDeltaS_ij) = comp.mbar.computePerturbedEntropyandEnthalpy(u_kln_P, uncertainty_method='svd-ew-kab')
                 if savedata and not timekln:
-                    if not os.path.isdir('esq_%s' % spacename):
-                        os.makedirs('esq_%s' % spacename) #Create folder
-                    savez('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
+                    if not os.path.isdir('hs_%s' % spacename):
+                        os.makedirs('hs_%s' % spacename) #Create folder
+                    savez('hs_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij, DeltaU_ij=DeltaU_ij, dDeltaU_ij=dDeltau_ij, DeltaS_ij=DeltaS_ij, dDeltaS_ij=dDeltaS_ij) #Save file
             else:
                 DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq))
                 DeltaF_ij = DeltaF_file['DeltaF_ij']
                 dDeltaF_ij = DeltaF_file['dDeltaF_ij']
+                DeltaU_ij = DeltaF_file['DeltaU_ij']
+                dDeltaU_ij = DeltaF_file['dDeltaU_ij']
+                DeltaS_ij = DeltaF_file['DeltaS_ij']
+                dDeltaS_ij = DeltaF_file['dDeltaS_ij']
             #printFreeEnergy(DeltaF_ij, dDeltaF_ij)
             if not timekln:
                 for iepsi in xrange(Nparm):
@@ -751,6 +757,10 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     #Unwrap the data
                     DelF[iq, iepsi,:] = DeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
                     dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    DelU[iq, iepsi,:] = DeltaU_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    dDelU[iq, iepsi,:] = dDeltaU_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    DelS[iq, iepsi,:] = DeltaS_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    dDelS[iq, iepsi,:] = dDeltaS_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
             laptime = time.clock()
             # Show timing statistics. copied from Repex.py, copywrite John Chodera
             final_time = time.time()
@@ -760,20 +770,25 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             estimated_finish_time = final_time + estimated_time_remaining
             print "Iteration took %.3f s." % elapsed_time
             print "Estimated completion in %s, at %s (consuming total wall clock time %s)." % (str(datetime.timedelta(seconds=estimated_time_remaining)), time.ctime(estimated_finish_time), str(datetime.timedelta(seconds=estimated_total_time)))
-            if not timekln and savedata:
-                #Save a copy of just the Nparm**3 matrix in case I dont want to save a large number of files
-                savez('esq_freeEnergies%s.npz'%spacename, free_energy=DelF, dfree_energy=dDelF)
     else:
         #if os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata: #Pull data from 
-        if os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata: #Pull data from 
+        if os.path.isfile('hs_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata: #Pull data from 
             DelF = numpy.zeros([Nparm, Nparm, Nparm])
             dDelF = numpy.zeros([Nparm, Nparm, Nparm])
+            DelU = numpy.zeros([Nparm, Nparm, Nparm])
+            dDelU = numpy.zeros([Nparm, Nparm, Nparm])
+            DelS = numpy.zeros([Nparm, Nparm, Nparm])
+            dDelS = numpy.zeros([Nparm, Nparm, Nparm])
             for iq in xrange(Nparm):
                 sys.stdout.flush()
                 sys.stdout.write('\rSave data detected, loading file %d/%d...' % (iq,Nparm-1))
-                DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq))
+                DeltaF_file = numpy.load('hs_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq))
                 DeltaF_ij = DeltaF_file['DeltaF_ij']
                 dDeltaF_ij = DeltaF_file['dDeltaF_ij']
+                DeltaU_ij = DeltaF_file['DeltaU_ij']
+                dDeltaU_ij = DeltaF_file['dDeltaU_ij']
+                DeltaS_ij = DeltaF_file['DeltaS_ij']
+                dDeltaS_ij = DeltaF_file['dDeltaS_ij']
                 for iepsi in xrange(Nparm):
                     #if includeRef:
                     #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+1:]
@@ -781,23 +796,14 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     #Unwrap the data
                     DelF[iq, iepsi,:] = DeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
                     dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    DelU[iq, iepsi,:] = DeltaU_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    dDelU[iq, iepsi,:] = dDeltaU_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    DelS[iq, iepsi,:] = DeltaS_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    dDelS[iq, iepsi,:] = dDeltaS_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
             sys.stdout.write('\n')
-        else:
-            figdata = numpy.load('esq_freeEnergies%s.npz'%spacename)
-            DelF = figdata['free_energy']
-            dDelF = figdata['dfree_energy']
-    #pdb.set_trace()
-   ###############################################
+    ###############################################
     ######### END FREE ENERGY CALCULATIONS ########
     ###############################################
-    #Set up a mask
-    if masked:
-        maDelF = ma.masked_where(numpy.fabs(DelF) > 200, DelF)
-        madDelF = ma.masked_where(numpy.fabs(DelF) > 200, dDelF)
-        orgDelF = DelF
-        orgdDelF = dDelF
-        DelF = maDelF
-        dDelF = madDelF
     #Set up scaling
     C12_max = 3
     C12_min = 3E-5
@@ -821,313 +827,14 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         
     DelF *= kjpermolTokcal/kjpermolTokT
     dDelF *= kjpermolTokcal/kjpermolTokT
+    DelU *= kjpermolTokcal/kjpermolTokT
+    dDelU *= kjpermolTokcal/kjpermolTokT
+    DelS *= kjpermolTokcal/kjpermolTokT
+    dDelS *= kjpermolTokcal/kjpermolTokT
     #Relative error
-    reldDelF = numpy.abs(dDelF/DelF)
+    #reldDelF = numpy.abs(dDelF/DelF)
     #pdb.set_trace()
  
-    ################################################
-    ################ region ID #####################
-    ################################################
-    '''
-    This section will be used to identify where extra sampling should be done. optional flag set at the start of this section
-    '''
-    id_regions = True
-    #Set the region id method, lloyd or dbscan
-    idmethod = 'dbscan'
-    db_rand = True
-    if id_regions and not os.path.isfile('resamp_points_n%i.npy'%nstates):
-        err_threshold = 0.5 #kcal/mol
-        #Filter data. notouch masks covers the sections we are not examining. touch is the sections we want
-        mdDelF_notouch = ma.masked_less(dDelF, err_threshold)
-        mdDelF_touch = ma.masked_greater(dDelF, err_threshold)
-        #Extract the mask to get where there are features. We will use this to id features to operate on
-        regions = ma.getmask(mdDelF_touch) #Extract the mask from the touch array as the Trues will line up with the areas more than the threshold
-        #Create the features map of 1's where we want features (greater than threshold), zeroes otherwise
-        features = numpy.zeros(dDelF.shape, dtype=numpy.int32)
-        features[regions] = 1 #Define features
-        #Define the features of the array by assigning labels
-        if idmethod is 'lloyd':
-            test_struct = numpy.ones([3,3,3])
-            feature_labels, num_features = ndimage.measurements.label(features)
-            test_feature_labels, test_num_features = ndimage.measurements.label(features, structure=test_struct)
-            """
-            Important note:
-            Labels of 0 in the feature_label arrays are not actually features! they are the background, so all looping will need to be done over the other indices
-            """
-            coms = numpy.zeros([num_features,3]) #Create the center of mass arrays
-            maxes = numpy.zeros(coms.shape)
-            maxes_esq = numpy.zeros(coms.shape)
-            coms_esq = numpy.zeros(coms.shape) # q, epsi, and sig com
-            test_coms = numpy.zeros([num_features,3]) #Create the center of mass arrays
-            test_coms_esq = numpy.zeros(coms.shape) # q, epsi, and sig com
-            for i in range(num_features):
-               index = i + 1 #convert my counter to the feature index
-               coms[i,:] = ndimage.measurements.center_of_mass(dDelF, feature_labels, index=index) #compute center of mass for each 
-               test_coms[i,:] = ndimage.measurements.center_of_mass(dDelF, test_feature_labels, index=index) #compute center of mass for each 
-               maxes[i,:] = ndimage.measurements.maximum_position(dDelF, feature_labels, index=index)
-               #Compute the corrisponding q, epsi, and sig from each com
-               fraction_along = coms[i,:] / (Nparm-1)
-               test_fraction_along = test_coms[i,:] / (Nparm-1)
-               coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
-               coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
-               coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
-               test_coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*test_fraction_along[0]
-               test_coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*test_fraction_along[1]
-               test_coms_esq[i,2] = sigStartSpace + (sigEndSpace-sigStartSpace)*test_fraction_along[2]
-               maxes_esq[i,0] = q_range[maxes[i,0]]
-               maxes_esq[i,1] = epsi_range[maxes[i,1]]
-               maxes_esq[i,2] = sig_range[maxes[i,2]]
-            print "Center of the %i regions with errors larger than %f kcal/mol" % (num_features, err_threshold)
-            print "in units of  q, kJ/mol, and nm"
-            print "Charge -- Epsilon -- Sigma"
-            print coms_esq
-            print "With test Structure"
-            print test_coms_esq
-            #Determine size of each feature to figure out which should have more
-            resample_tol = 0.15
-            #!!!
-            #Convert to broader test structure
-            num_features = test_num_features
-            feature_labels = test_feature_labels
-            resample_tol = 0.30
-            #end!!!
-            Nresample = numpy.zeros(num_features, dtype=numpy.int32)
-            Nsize = numpy.zeros(num_features, dtype=numpy.int32)
-            for i in range(num_features):
-                index = i + 1 #Convert to index
-                Nsize[i] = numpy.where(feature_labels == index)[0].shape[0]
-            #Points will be distributed with the following rules:
-            # The pecent of points from each feature will be identified
-            # There will be a finite number of points to add per distribution (10)
-            # Pecrent of points in each feature will be converted to decipercent 34% = 3.4 deci%
-            # Starting with the largest cluster (highest %) then in decending order, alternate celing and floor with deci%
-            # The celing/floor will be the # of points distributed to that cluster
-            # Points will be distriubed until we run out!
-            ndistrib = 10 # Number of poitns to distribute
-            percentSize = Nsize/float(Nsize.sum()) #Generate percentages
-            deciPercents = percentSize * 10 #Convert to deciPercent (e.g. 0.34 = 34% = 3.4 deci%)
-            sortedNdxMaxMin = numpy.argsort(deciPercents)[::-1] #Figure out which has the max
-            updown = numpy.ceil
-            pointsleft = ndistrib
-            for index in sortedNdxMaxMin:
-                pointsToGive = updown(deciPercents[index])
-                if pointsToGive <= pointsleft:
-                    Nresample[index] = pointsToGive
-                    pointsleft -= pointsToGive
-                elif pointsToGive > pointsleft and pointsleft != 0:
-                    Nresample[index] = pointsleft
-                    pointsleft -= pointsleft
-                else:
-                    Nresample[index] = 0
-                if updown is numpy.ceil:
-                    updown = numpy.floor
-                else:
-                   updown = numpy.ceil 
-            #Nresample[Nsize/float(Nsize.sum()) > resample_tol] = 3 #Resample at > 30% of the total points
-            #Nresamp_total = Nresample.sum()
-            resamp_points = numpy.zeros([Nresample.sum(), 3])
-            closest_interiors = numpy.zeros(resamp_points.shape)
-            #Tesalate over where multiple samples are needed based on k-clustering Lloyd's algorithm
-            #pdb.set_trace()
-            resamp_counter = 0
-            for i in xrange(num_features):
-                index = i + 1 #Convert to index
-                #if Nresample[i] > 1:
-                if Nresample[i] > 0:
-                    feature_indices = numpy.transpose(numpy.array(numpy.where(feature_labels==index))) #Creates a NxD matrix where N=feature.size
-                    #feature_indices = numpy.where(feature_labels==i)
-                    mu, clusters = find_centers(feature_indices, Nresample[i], dDelF)
-                    for n in range(Nresample[i]):
-                        fraction_along = mu[n] / (Nparm-1)
-                        resamp_points[resamp_counter,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
-                        resamp_points[resamp_counter,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
-                        resamp_points[resamp_counter,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
-                        resamp_counter += 1
-                        #closest_interiors = closest_index(mu[n], feature_labels, i)
-                #else:
-                    #Comment out to ignore these for weaker features
-                    #resamp_points[resamp_counter,:] = coms_esq[i,:]
-                    #resamp_counter += 1
-        elif idmethod is 'dbscan':
-            nP_per_path = 3
-            #Try to call up old vertices (neighborhood centers)
-            ###### Disabled for now #####
-            #try:
-            #    #Find the saved vertices file
-            #    vertices = numpy.load('vertices.npy')
-            #except:
-            #    #Fall back to only the reference state
-            #    vertices = numpy.zeros([1,3])
-            #    vertices[0,0] = q_samp_space[Ref_state]
-            #    vertices[0,1] = epsi_samp_space[Ref_state]
-            #    vertices[0,2] = sig_samp_space[Ref_state]
-            #############################
-            vertices = numpy.zeros([1,3])
-            vertices[0,0] = q_samp_space[Ref_state]
-            vertices[0,1] = epsi_samp_space[Ref_state]
-            vertices[0,2] = sig_samp_space[Ref_state]
-            scanner = dbscan.dbscan(features, dDelF)
-            #Find features
-            #pdb.set_trace()
-            feature_labels, num_features = scanner.generate_neighborhoods()
-            vertex_index = [] #Store which cluster labels to make a vertex out of
-            fsize = numpy.zeros(num_features,dtype=int)
-            #Tabulate Features
-            for i in xrange(num_features):
-                index = i + 1
-                #This excludes the 0 index (background)
-                fsize[i] = numpy.where(feature_labels == index)[0].size
-            #Find features we care about
-            for i in xrange(num_features):
-                if fsize[i]/float(fsize.sum()) >= 0.1: #Feature larger than 10% of all non-background features
-                    vertex_index.append(i+1) #Reaccount for excluding the 0 index
-            if len(vertex_index) == 0: #Check for only a whole bunch of small clusters
-                maxV = 3
-                nV = 0
-                for i in numpy.argsort(fsize)[::-1]: #Sort sizes from max to 
-                    try:
-                        #Add next largest cluster if possible
-                        vertex_index.append(i+1)
-                        nV += 1
-                        if nV >= maxV:
-                            break
-                    except: #Exception for no clusters available, break
-                        #This should only happen when fsize is 0 or something.
-                        break
-            #Create master vertex system for graph
-            Nnew_vertices = len(vertex_index)
-            if db_rand:
-                #Randomly choose a point inside each region
-                new_points = numpy.zeros([Nnew_vertices,3])
-                new_points_esq = numpy.zeros(new_points.shape)
-                #Get the slices of each region
-                shapes = ndimage.find_objects(feature_labels)
-                for i in range(Nnew_vertices):
-                    index = vertex_index[i]
-                    shape_slices = shapes[index-1] # The features are in a list with the list index = feature # - 1
-                    pointfound = False
-                    while not pointfound:
-                        ndx_point = numpy.zeros(3)
-                        #Roll random numbers
-                        rng = numpy.random.rand(3)
-                        #assign an index based on top bottom
-                        for dim in range(3):
-                            start = int(shape_slices[dim].start)
-                            end = int(shape_slices[dim].stop) - 1 #Account for the fact that the end index is 1 larger than the available index's
-                            delta = end-start
-                            ndx_point[dim] = start + rng[dim]*delta
-                        #See what the closest index is
-                        rndx, near_ndx = closest_point_with_index(ndx_point, feature_labels)
-                        if near_ndx == index:
-                            pointfound = True
-                            new_points[i,:] = ndx_point
-                    fraction_along = new_points[i,:] / (Nparm-1)
-                    new_points_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
-                    new_points_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
-                    new_points_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
-                vertices = numpy.concatenate((vertices,new_points_esq))
-                resamp_points = new_points_esq
-            else:
-                #Vertex is the center of mass of the region
-                coms = numpy.zeros([Nnew_vertices,3]) #Create the center of mass arrays
-                coms_esq = numpy.zeros(coms.shape) # q, epsi, and sig com
-                #Trap nan's
-                nandDelF = dDelF.copy()
-                nandDelF[numpy.isnan(dDelF)] = numpy.nanmax(dDelF)
-                for i in range(Nnew_vertices):
-                    index = vertex_index[i] #convert my counter to the feature index
-                    coms[i,:] = ndimage.measurements.center_of_mass(nandDelF, feature_labels, index=index) #compute center of mass for each 
-                    #Compute the corrisponding q, epsi, and sig from each com
-                    fraction_along = coms[i,:] / (Nparm-1)
-                    coms_esq[i,0] = qStartSpace + (qEndSpace-qStartSpace)*fraction_along[0]
-                    coms_esq[i,1] = epsiStartSpace + (epsiEndSpace-epsiStartSpace)*fraction_along[1]
-                    coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
-                vertices = numpy.concatenate((vertices,coms_esq))
-                resamp_points = coms_esq
-            numpy.save('vertices{0:d}.npy'.format(nstates), vertices) #Backups
-            #numpy.save('vertices.npy', vertices)
-            #Generate the complete connectivity network in upper triangle matrix
-            nv = vertices.shape[0]
-            lengths = numpy.zeros([nv,nv])
-            #Convert to index lengths on vertices before measuring lengths, this is the only places its needed
-            ndx_vertices = numpy.zeros(vertices.shape)
-            qSE = {'start':qStartSpace,'end':qEndSpace}
-            eSE = {'start':epsiStartSpace,'end':epsiEndSpace}
-            sSE = {'start':sigStartSpace,'end':sigEndSpace,'factor':3}
-            SEall = [qSE, eSE, sSE]
-            for dim in range(3):
-                ndx_vertices[:,dim] = esq_to_ndx(vertices[:,dim], **SEall[dim])
-            for v in xrange(nv):
-                for vj in xrange(v,nv):
-                    lengths[v,vj] = numpy.linalg.norm(ndx_vertices[v,:]-ndx_vertices[vj,:])
-            #Compute the minium spanning tree
-            sparse_mst = csgraph.minimum_spanning_tree(lengths)
-            #Convert to human-readable format
-            mst = sparse_mst.toarray()
-            #pdb.set_trace()
-            #Generate the resample points, starting with the new vertices
-            nline = 51
-            line_frac = linspace(0,1,nline)
-            edgen = 0
-            for v in xrange(nv):
-                for vj in xrange(v,nv):
-                    #Check if there is an Edge connecting the vertices
-                    if mst[v,vj] > 0:
-                        #Generate the Edge points
-                        edge = numpy.zeros([nline,3])
-                        edgendx = numpy.zeros([nline,3])
-                        edgedelF = numpy.zeros([nline])
-                        #Line is somewhat directional, 
-                        #but since I only care about "border" where the largest transition occurs
-                        #This problem resolves itself
-                        edge[:,0] = vertices[v,0] + (vertices[vj,0] - vertices[v,0])*line_frac
-                        edgendx[:,0] = esq_to_ndx(edge[:,0], qStartSpace, qEndSpace)
-                        edge[:,1] = vertices[v,1] + (vertices[vj,1] - vertices[v,1])*line_frac
-                        edgendx[:,1] = esq_to_ndx(edge[:,1], epsiStartSpace, epsiEndSpace)
-                        edge[:,2] = (vertices[v,2]**3 + (vertices[vj,2]**3 - vertices[v,2]**3)*line_frac)**(1.0/3)
-                        edgendx[:,2] = esq_to_ndx(edge[:,2], sigStartSpace, sigEndSpace, factor=3)
-                        #Determine the average "error" of each point based on proximity to the 8 cube points around it
-                        for point in xrange(nline):
-                            edgedelF[point] = cubemean(edgendx[point,:],dDelF)
-                        #Generate a laplace filter to find where the sudden change in edge is
-                        #laplaceline = scipy.ndimage.filters.laplace(edgedelF)
-                        laplaceline = scipy.ndimage.filters.sobel(edgedelF)
-                        #f,(b,a) = plt.subplots(1,2)
-                        #a.plot(line_frac, laplaceline)
-                        #b.plot(line_frac, edgedelF)
-                        #a.set_title('Edge Detection\nTransform')
-                        #b.set_title(r'$\delta\Delta F$')
-                        #f.savefig('sorbel_edge{0:d}'.format(edgen), bbox_inches='tight')
-                        #edgen+=1
-                        #plt.show()
-                        #pdb.set_trace()
-                        #Find the point where this change is the largest and add it to the resampled points
-                        if db_rand and False: #Disabled for now
-                            #Find the point in the edge which has the maximum distance from its closest point
-                            #i.e. the closest point is further away than any other point's neighbors
-                            mindata = {'ndx':-1, 'mindist':0}
-                            for i in xrange(nline): #Go through each point in the edge
-                                #Set the slice array
-                                noti = numpy.ones(nline, dtype=bool)
-                                noti[i] = 0
-                                distset = numpy.abs(edgedelF[noti] - edgedelF[i]) #Take the distance btween every other point
-                                if distset.min() > mindata['mindist'] and edgedelF[i] > err_threshold : #If a new maximum minimum-distance is found, set it (must also be a region of uncertainty)
-                                    mindata['mindist'] = distset.min()
-                                    mindata['ndx'] = i
-                            #Assign the new point to be sampled
-                            new_point = edge[mindata['ndx'],:]
-                        else:
-                            boundaryline = int(numpy.nanargmax(numpy.abs(laplaceline)))
-                            new_point = edge[boundaryline,:]
-                        #Check to make sure its not in our points already (can happen with MST)
-                        #Added spaces to help readability comprehension
-                        if not numpy.any([   numpy.allclose(numpy.array([q_samp_space[i],epsi_samp_space[i],sig_samp_space[i]]), new_point)   for i in xrange(nstates)]):
-                            #Cast new_point to the correct dims before appending
-                            resamp_points = numpy.concatenate((resamp_points, numpy.array([new_point])))
-        numpy.savetxt('resamp_points_n%i.txt'%nstates, resamp_points)
-        numpy.save('resamp_points_n%i.npy'%nstates, resamp_points)
-        #Test: set the dDelF where there are not features to 0
-        #dDelF[ma.getmask(mdDelF_notouch)] = 0
 
     ################################################
     ################# PLOTTING #####################
@@ -1146,9 +853,22 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     '''
     Observant readers will notice that DelF and dDelF are in dimensions of [epsi,sig] but I plot in sig,epsi. That said, the color map is CORRECT with this method... somehow. I questioned it once and then decided to come back to it at a later date.
     '''
+    #Entropy
+    h,(Hplot,dHplot) = plt.subplots(2,1,sharex=True)
+    gH,rdHplot = plt.subplots(1,1)
+    rdHFig = gH
+    Hplotlist=[Hplot,dHplot]
+    s,(Splot,dSplot) = plt.subplots(2,1,sharex=True)
+    gS,rdHplot = plt.subplots(1,1)
+    rdSFig = gH
+    Splotlist=[Splot,dSplot]
     import matplotlib.animation as ani
     cvmax = DelF.max()*1.01
     cvmin = DelF.min()*1.01
+    cvmaxH = DelH.max()*1.01
+    cvminH = DelH.min()*1.01
+    cvmaxS = DelS.max()*1.01
+    cvminS = DelS.min()*1.01
     #Set the default error tolerance
     try:
         errorlimits = numpy.load('n24_error_lims.npy')
@@ -1159,6 +879,25 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         cdvmax = dDelF.max()*1.01
         if nstates == 24:
             numpy.save('n24_error_lims.npy', numpy.array([dDelF.min()*1.01, dDelF.max()*1.01]))
+    #load for H and S
+    try: # H
+        errorlimitsH = numpy.load('n24H_error_lims.npy')
+        cdvminH = errorlimitsH[0]
+        cdvmaxH = errorlimitsH[1]
+    except:
+        cdvminH = dDelH.min()*1.01
+        cdvmaxH = dDelH.max()*1.01
+        if nstates == 24:
+            numpy.save('n24H_error_lims.npy', numpy.array([dDelH.min()*1.01, dDelH.max()*1.01]))
+    try: #S
+        errorlimitsS = numpy.load('n24S_error_lims.npy')
+        cdvminS = errorlimitsS[0]
+        cdvmaxS = errorlimitsS[1]
+    except:
+        cdvminS = dDelS.min()*1.01
+        cdvmaxS = dDelS.max()*1.01
+        if nstates == 24:
+            numpy.save('n24S_error_lims.npy', numpy.array([dDelS.min()*1.01, dDelS.max()*1.01]))
     try:
         relerrlims = numpy.load('max_rel_err_lims.npy')
         crdvmin = relerrlims[0]
@@ -1173,236 +912,273 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         #crdvmax = reldDelF.max()*1.01
         crdvmax = reldDelF.mean() + 2*numpy.sqrt(reldDelF.var())
         numpy.save('max_rel_err_lims.npy', numpy.array([0,crdvmax]))
-    #imgFplot = Fplot.pcolormesh(sig_range**sig_factor,epsi_range,DelF[(Nparm-1)/2,:,:], vmax=cvmax, vmin=cvmin)
-    imgFplot = Fplot.pcolormesh(sig_range**sig_factor,epsi_range,DelF[(Nparm-1)/2,:,:])
-    #imgFplot = Fplot.pcolormesh(sig_range**sig_factor,epsi_range,[])
-    #Set the colorbar
-    divFplot = mal(Fplot)
-    caxFplot = divFplot.append_axes('right', size='5%', pad=0.05)
-    cFplot = f.colorbar(imgFplot, cax=caxFplot)
-    #cFplot.set_clim(vmin=cvmin, vmax=cvmax)
-    #set the minmax colorscales
-    #print cFplot.get_clim()
-    #cvmin, cvmax = (-21.971123537881027, 20.78176716595965) #These are the 11 nstate plots
-    #cvmin, cvmax = (-14.542572154421956, 8.6595207877425739)
-    ####### Error plot #######
-    #imgdFplot = dFplot.pcolormesh(sig_range**sig_factor,epsi_range,dDelF[(Nparm-1)/2,:,:], vmax=cdvmax, vmin=cdvmin)
-    imgdFplot = dFplot.pcolormesh(sig_range**sig_factor,epsi_range,dDelF[(Nparm-1)/2,:,:])
-    #imgdFplot = dFplot.pcolormesh(sig_range**sig_factor,epsi_range,dDelF[5,:,:])
-    #imgdFplot = dFplot.pcolormesh(sig_range**sig_factor,epsi_range,[])
-    divdFplot = mal(dFplot)
-    caxdFplot = divdFplot.append_axes('right', size='5%', pad=0.05)
-    #Set the minmax colorscales
-    #print imgdFplot.get_clim()
-    #cdvmin, cdvmax = (0.00019094581786378227, 0.45022226894935008) #These are the 11 nstate plots
-    #cdvmin, cdvmax = (3.1897634261829015e-05, 0.22292838017499619) 
-    #sys.exit(0)
-    imgdFplot.set_clim(vmin=cdvmin, vmax=cdvmax)
-    cdFplot = f.colorbar(imgdFplot, cax=caxdFplot)
-    ####### Relative Error Plot ########
-    imgrdFplot = rdFplot.pcolormesh(sig_range**sig_factor,epsi_range,reldDelF[(Nparm-1)/2,:,:])
-    divrdFplot = mal(rdFplot)
-    caxrdFplot = divrdFplot.append_axes('right', size='5%', pad=0.05)
-    imgrdFplot.set_clim(vmin=crdvmin, vmax=crdvmax)
-    crdFplot = rdFig.colorbar(imgrdFplot, cax=caxrdFplot)
 
-    sup_title_template = r'$\Delta G$ (top) and $\delta\Delta G$(bottom) with $q=%.2f$ for LJ Spheres' + '\n in units of kcal/mol'
-    ftitle = f.suptitle('')
+    #Plot H
+    imgHplot = Hplot.pcolormesh(sig_range**sig_factor,epsi_range,DelH[(Nparm-1)/2,:,:])
+    #Set the colorbar
+    divHplot = mal(Hplot)
+    caxHplot = divHplot.append_axes('right', size='5%', pad=0.05)
+    cHplot = h.colorbar(imgHplot, cax=caxHplot)
+    #set the minmax colorscales
+    ####### Error plot #######
+    imgdHplot = dHplot.pcolormesh(sig_range**sig_factor,epsi_range,dDelH[(Nparm-1)/2,:,:])
+    divdHplot = mal(dHplot)
+    caxdHplot = divdHplot.append_axes('right', size='5%', pad=0.05)
+    #Set the minmax colorscales
+    imgdHplot.set_clim(vmin=cdvminH, vmax=cdvmaxH)
+    cdHplot = h.colorbar(imgdHplot, cax=caxdHplot)
+    Hsup_title_template = r'$\Delta H$ (top) and $\delta\Delta H$(bottom) with $q=%.2f$ for LJ Spheres' + '\n in units of kcal/mol'
+    htitle = h.suptitle('')
     #Set up the empty plots
-    #Fscatters = []
-    #dFscatters = []
-    Fline, = Fplot.plot([], [], linewidth=2, color='k')
-    dFline, = dFplot.plot([], [], linewidth=2, color='w')
-    #F_scatter_noref = Fplot.scatter([], [], s=60, c='k', marker='x')
-    #dF_scatter_noref = dFplot.scatter([], [], s=60, c='w', marker='x')
-    #F_scatter_ref = Fplot.scatter([], [], s=70, c='k', marker='D')
-    #dF_scatter_ref = dFplot.scatter([], [], s=70, c='w', marker='D')
-    F_scatter_noref, = Fplot.plot([], [], linestyle='', markersize=5, color='k', marker='x', markeredgewidth=2)
-    dF_scatter_noref, = dFplot.plot([], [], linestyle='', markersize=5, color='w', marker='x', markeredgewidth=2)
-    F_scatter_ref, = Fplot.plot([], [], linestyle='', markersize=6, color='k', marker='D', markeredgewidth=2)
-    dF_scatter_ref, = dFplot.plot([], [], linestyle='', markersize=6, color='w', marker='D', markeredgewidth=2, markeredgecolor='w')
+    #Hscatters = []
+    #dHscatters = []
+    Hline, = Hplot.plot([], [], linewidth=2, color='k')
+    dHline, = dHplot.plot([], [], linewidth=2, color='w')
+    #H_scatter_noref = Hplot.scatter([], [], s=60, c='k', marker='x')
+    #dH_scatter_noref = dHplot.scatter([], [], s=60, c='w', marker='x')
+    #H_scatter_ref = Hplot.scatter([], [], s=70, c='k', marker='D')
+    #dH_scatter_ref = dHplot.scatter([], [], s=70, c='w', marker='D')
+    H_scatter_noref, = Hplot.plot([], [], linestyle='', markersize=5, color='k', marker='x', markeredgewidth=2)
+    dH_scatter_noref, = dHplot.plot([], [], linestyle='', markersize=5, color='w', marker='x', markeredgewidth=2)
+    H_scatter_ref, = Hplot.plot([], [], linestyle='', markersize=6, color='k', marker='D', markeredgewidth=2)
+    dH_scatter_ref, = dHplot.plot([], [], linestyle='', markersize=6, color='w', marker='D', markeredgewidth=2, markeredgecolor='w')
     #Create the scatter sampled data
     noref = numpy.ma.array(range(nstates), mask=False)
     noref.mask[Ref_state]=True
     noref = noref.compressed()
     scatter_epsis = epsi_samp_space[noref]
     scatter_sig = sig_samp_space[noref]
-    #for i in xrange(nstates):
-    #    epsi = epsi_samp_space[i]
-    #    sig = sig_samp_space[i]
-    #    if i == Ref_state:
-    #        marker_color = 'k'
-    #        marker_size  = 70
-    #        marker_style = 'D'
-    #    else:
-    #        marker_color = 'k'
-    #        marker_size  = 60
-    #        marker_style = 'x'
-    #    #if lam == 0 and spacing is logspace:
-    #    #    lam = 10**(StartSpace-1)
-    #    Fplot.scatter(sig**sig_factor,epsi, s=marker_size, c=marker_color, marker=marker_style)
-    #    dFplot.scatter(sig**sig_factor,epsi, s=marker_size, c='w', marker=marker_style)
-    if plotReal and Ref_state == 6:
-            Fplot.scatter(realsig**sig_factor, realepsi, s=60, c='k', marker='+')
-            dFplot.scatter(realsig**sig_factor, realepsi, s=60, c='w', marker='+')
-    #plotlam = sampled_lam
-    #if spacing is logspace and plotlam[0] == 0 and not plotC12_6:
-    #    plotlam[0] = 10**(StartSpace-1)
-    #Fplot.plot(sig_range**sig_factor, epsi_plot_range, linewidth=2, color='k')
-    #dFplot.plot(sig_range**sig_factor, epsi_plot_range, linewidth=2, color='w')
-    if annotatefig:
-        if plotReal:
-            xyarrs = zip(anrealsig[:-1]**sig_factor, anrealepsi[:-1])
-            antxt = "Chemically Realistic LJ Spheres"
-            xoffset = 0.9
-            realnamelong = ['UA Methane', 'Neopentane', r'C$_{60}$ Sphere']
-            #Label the actual points
-            bbox_def = dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7)
-            Fplot.annotate(realnamelong[0], #String
-                           (realsig[0], realepsi[0]), xycoords='data', #Point Where are we annotating at
-                           xytext=(4, -18), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
-                           bbox=bbox_def) #style
-            Fplot.annotate(realnamelong[1], #String
-                           (realsig[1], realepsi[1]), xycoords='data', #Point Where are we annotating at
-                           xytext=(-62, -20), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
-                           bbox=bbox_def) #style
-            Fplot.annotate(realnamelong[2], #String
-                           (realsig[2], realepsi[2]), xycoords='data', #Point Where are we annotating at
-                           xytext=(6, 10), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
-                           bbox=bbox_def) #style
-        else:
-            xyarrs = [(anrealsig[-1]**sig_factor, anrealepsi[-1])]
-            antxt = "Reference State"
-            xoffset = 1
-        my_annotate(Fplot,
-                antxt,
-                xy_arr=xyarrs, xycoords='data',
-                xytext=(sig_range.max()/2*xoffset, epsiEndSpace/2), textcoords='data',
-                bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7),
-                arrowprops=dict(arrowstyle="-|>",
-                                connectionstyle="arc3,rad=0.2",
-                                fc="w", linewidth=2))
-        if nstates == 12:
-            xypt = [(sig_samp_space[-1], epsi_samp_space[-1])]
-            my_annotate(Fplot,
-                        "Extra Sampling",
-                        xy_arr=xypt, xycoords='data',
-                        xytext=(sigPlotStart*1.05, epsiEndSpace/2*1.05), textcoords='data',
-                        bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7),
-                        arrowprops=dict(arrowstyle="-|>",
-                                        connectionstyle="arc3,rad=0.2",
-                                        fc="w", linewidth=2))
     for ax in plotlist:
         ax.set_yscale(spacename)
         ax.set_xscale(spacename)
         ax.set_ylim([epsiPlotStart,epsiPlotEnd])
         ax.set_xlim([sigPlotStart,sigPlotEnd])
         ax.patch.set_color('grey')
-    f.subplots_adjust(hspace=0.02)
-    f.text(0.05, .5, ylabel, rotation='vertical', horizontalalignment='center', verticalalignment='center', fontsize=20)
-    if relativeErr:
-        rdFplot.set_xlabel(xlabel, fontsize=20)
-    else:
-        dFplot.set_xlabel(xlabel, fontsize=20)
+    h.subplots_adjust(hspace=0.02)
+    h.text(0.05, .5, ylabel, rotation='vertical', horizontalalignment='center', verticalalignment='center', fontsize=20)
+    dHplot.set_xlabel(xlabel, fontsize=20)
     #Animate the figures
-    realcMax = -10**20 #Some really small number
-    realcMin = 10**20 #some really large number
-    realdcMax = -10**20 #Some really small number
-    realdcMin = 10**20 #some really large number
+    realcMaxH = -10**20 #Some really small number
+    realcMinH = 10**20 #some really large number
+    realdcMaxH = -10**20 #Some really small number
+    realdcMinH = 10**20 #some really large number
     q_ref = q_samp_space[Ref_state]
     sig_ref = sig_samp_space[Ref_state]
     epsi_ref = epsi_samp_space[Ref_state]
-    def cleanup():
-        imgFplot.set_array([])
-        imgdFplot.set_array([])
-        imgrdFplot.set_array([])
-        ftitle.set_text('')
-        F_scatter_ref.set_data([], [])
-        dF_scatter_ref.set_data([], [])
-        F_scatter_noref.set_data([], [])
-        dF_scatter_noref.set_data([], [])
-        Fline.set_data([], [])
-        dFline.set_data([], [])
+    def cleanupiH():
+        imgHplot.set_array([])
+        imgdHplot.set_array([])
+        imgrdHplot.set_array([])
+        htitle.set_text('')
+        H_scatter_ref.set_data([], [])
+        dH_scatter_ref.set_data([], [])
+        H_scatter_noref.set_data([], [])
+        dH_scatter_noref.set_data([], [])
+        Hline.set_data([], [])
+        dHline.set_data([], [])
         #for iscatter,discatter in zip(Fscatters,dFscatters):
         #    iscatter.set_data([],[])
         #    discatter.set_data([],[])
         if relativeErr:
             return imgFplot, imgdFplot, imgrdFplot, ftitle, F_scatter_noref, dF_scatter_noref, F_scatter_ref, dF_scatter_ref, Fline, dFline
         else:
-            return imgFplot, imgdFplot, ftitle, F_scatter_noref, dF_scatter_noref, F_scatter_ref, dF_scatter_ref, Fline, dFline
-    def moveq(qndx):
+            return imgHplot, imgdHplot, htitle, H_scatter_noref, dH_scatter_noref, H_scatter_ref, dH_scatter_ref, Hline, dHline
+    def moveqH(qndx):
         q = q_range[qndx]
         #I have to create a secondary pcolormesh set since pcolormesh truncates the array size to make the render faster (I dont think pcolor would but would be slower)
         #If you don't do this, then it creates a weird set of lines which make no sense
-        scrapFig, (scrapF, scrapdF, scraprdF) = plt.subplots(3,1)
-        scrapFplot = scrapF.pcolormesh(sig_range**sig_factor,epsi_range,DelF[qndx,:,:])
+        scrapHig, (scrapH, scrapdH, scraprdH) = plt.subplots(3,1)
+        scrapHplot = scrapH.pcolormesh(sig_range**sig_factor,epsi_range,DelH[qndx,:,:])
         #Lock down the color choice for the error plot
-        scrapdFplot = scrapdF.pcolormesh(sig_range**sig_factor,epsi_range,dDelF[qndx,:,:], vmax=cdvmax, vmin=cdvmin)
+        scrapdHplot = scrapdH.pcolormesh(sig_range**sig_factor,epsi_range,dDelH[qndx,:,:], vmax=cdvmaxH, vmin=cdvminH)
         #Lock down the color choice for the relative error plot
-        scraprdFplot = scraprdF.pcolormesh(sig_range**sig_factor,epsi_range,reldDelF[qndx,:,:],vmax=crdvmax, vmin=crdvmin)
+        scraprdHplot = scraprdH.pcolormesh(sig_range**sig_factor,epsi_range,reldDelH[qndx,:,:],vmax=crdvmaxH, vmin=crdvminH)
         #Reassign the plots, if you did not use an already generated array, you would need to .ravel() on the array you feed to set_array()
-        imgFplot.set_array(scrapFplot.get_array())
-        imgdFplot.set_array(scrapdFplot.get_array())
-        imgrdFplot.set_array(scraprdFplot.get_array())
-        ftitle.set_text(sup_title_template % q)
-        Dmax = DelF[qndx,:,:].max()
-        Dmin = DelF[qndx,:,:].min()
-        dDmax = dDelF[qndx,:,:].max()
-        dDmin = dDelF[qndx,:,:].min()
-        imgFplot.set_clim(vmin=Dmin, vmax=Dmax)
+        imgHplot.set_array(scrapHplot.get_array())
+        imgdHplot.set_array(scrapdHplot.get_array())
+        imgrdHplot.set_array(scraprdHplot.get_array())
+        htitle.set_text(Hsup_title_template % q)
+        Hmax = DelH[qndx,:,:].max()
+        Hmin = DelH[qndx,:,:].min()
+        dHmax = dDelH[qndx,:,:].max()
+        dHmin = dDelH[qndx,:,:].min()
+        imgHplot.set_clim(vmin=Hmin, vmax=Hmax)
         #imgdFplot.set_clim(vmin=dDmin, vmax=dDmax)
         #Set up the scatters
         #Set the Q scatters correctly
         qsampled = numpy.where(q_samp_space == q) #Get all sampled states from the current q value
         epsi_qsamp = epsi_samp_space[qsampled]
         sig_qsamp = sig_samp_space[qsampled]
-        F_scatter_noref.set_data(sig_qsamp**sig_factor, epsi_qsamp)
-        dF_scatter_noref.set_data(sig_qsamp**sig_factor, epsi_qsamp)
+        H_scatter_noref.set_data(sig_qsamp**sig_factor, epsi_qsamp)
+        dH_scatter_noref.set_data(sig_qsamp**sig_factor, epsi_qsamp)
         if numpy.any(Ref_state == qsampled[0]):
-            F_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
-            dF_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
+            H_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
+            dH_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
         else:
-            #F_scatter_ref.set_data([], [])
-            #dF_scatter_ref.set_data([], [])
-            F_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
-            dF_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
+            #H_scatter_ref.set_data([], [])
+            #dH_scatter_ref.set_data([], [])
+            H_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
+            dH_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
         if q == 0:
-            Fline.set_data(sig_range**sig_factor, epsi_plot_range)
-            dFline.set_data(sig_range**sig_factor, epsi_plot_range)
+            Hline.set_data(sig_range**sig_factor, epsi_plot_range)
+            dHline.set_data(sig_range**sig_factor, epsi_plot_range)
         else:
-            Fline.set_data([], [])
-            dFline.set_data([], [])
+            Hline.set_data([], [])
+            dHline.set_data([], [])
         #Cleanup scrap figure to avoid memory buildup
-        plt.close(scrapFig)
+        plt.close(scrapHig)
         if relativeErr:
             return imgFplot, imgdFplot, imgrdFplot, ftitle, F_scatter_noref, dF_scatter_noref, F_scatter_ref, dF_scatter_ref, Fline, dFline
         else:
-            return imgFplot, imgdFplot, ftitle, F_scatter_noref, dF_scatter_noref, F_scatter_ref, dF_scatter_ref, Fline, dFline
-    aniU = ani.FuncAnimation(f, moveq, range(Nparm), interval=150, blit=False, init_func=cleanup)
+            return imgHplot, imgdHplot, ftitle, H_scatter_noref, dH_scatter_noref, H_scatter_ref, dH_scatter_ref, Hline, dHline
+    aniH = ani.FuncAnimation(h, moveqH, range(Nparm), interval=150, blit=False, init_func=cleanupH)
     if relativeErr:
         filename='Animated_charging_rel{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
     else:
-        filename='Animated_charging{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
+        filename='Animated_charging_H{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
     #pdb.set_trace()
-    aniU.save(filename, dpi=400)
+    aniH.save(filename, dpi=400)
     #save a single frame
     #qframe=40
-    #moveq(qframe)
-    #f.savefig('DelF_Nstate_%i_Qndx_%i.png' % (nstates, qframe), bbox_inches='tight', dpi=400)
-    #if savefigs:
-    #    if plotReal:
-    #        plotrealstr = "T"
-    #    else:
-    #        plotrealstr = "F"
-    #    f.patch.set_alpha(0.0)
-    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.png' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight', dpi=600)  
-    #    print "Making the PDF, boss!"
-    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.pdf' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
-    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
-    #else:
-    #    plt.show()
+    #moveqH(qframe)
+    #h.savefig('DelH_Nstate_%i_Qndx_%i.eps' % (nstates, qframe), bbox_inches='tight', dpi=400)
     #pdb.set_trace()
-    #sys.exit(0) #Terminate here
+
+
+    """
+    Repeat process for S
+    """
+    #Plot s
+    imgSplot = Splot.pcolormesh(sig_range**sig_factor,epsi_range,DelS[(Nparm-1)/2,:,:])
+    #Set the colorbar
+    divSplot = mal(Splot)
+    caxSplot = divSplot.append_axes('right', size='5%', pad=0.05)
+    cSplot = s.colorbar(imgSplot, cax=caxSplot)
+    #set the minmax colorscales
+    ####### Error plot #######
+    imgdSplot = dSplot.pcolormesh(sig_range**sig_factor,epsi_range,dDelS[(Nparm-1)/2,:,:])
+    divdSplot = mal(dSplot)
+    caxdSplot = divdSplot.append_axes('right', size='5%', pad=0.05)
+    #Set the minmax colorscales
+    imgdSplot.set_clim(vmin=cdvminS, vmax=cdvmaxS)
+    cdSplot = s.colorbar(imgdSplot, cax=caxdSplot)
+    Ssup_title_template = r'$\Delta S$ (top) and $\delta\Delta S$(bottom) with $q=%.2f$ for LJ Spheres' + '\n in units of kcal/mol'
+    stitle = s.suptitle('')
+    #Set up the empty plots
+    #Sscatters = []
+    #dSscatters = []
+    Sline, = Splot.plot([], [], linewidth=2, color='k')
+    dSline, = dSplot.plot([], [], linewidth=2, color='w')
+    #S_scatter_noref = Splot.scatter([], [], s=60, c='k', marker='x')
+    #dS_scatter_noref = dSplot.scatter([], [], s=60, c='w', marker='x')
+    #S_scatter_ref = Splot.scatter([], [], s=70, c='k', marker='D')
+    #dS_scatter_ref = dSplot.scatter([], [], s=70, c='w', marker='D')
+    S_scatter_noref, = Splot.plot([], [], linestyle='', markersize=5, color='k', marker='x', markeredgewidth=2)
+    dS_scatter_noref, = dSplot.plot([], [], linestyle='', markersize=5, color='w', marker='x', markeredgewidth=2)
+    S_scatter_ref, = Splot.plot([], [], linestyle='', markersize=6, color='k', marker='D', markeredgewidth=2)
+    dS_scatter_ref, = dSplot.plot([], [], linestyle='', markersize=6, color='w', marker='D', markeredgewidth=2, markeredgecolor='w')
+    #Create the scatter sampled data
+    noref = numpy.ma.array(range(nstates), mask=False)
+    noref.mask[Ref_state]=True
+    noref = noref.compressed()
+    scatter_epsis = epsi_samp_space[noref]
+    scatter_sig = sig_samp_space[noref]
+    for ax in plotlist:
+        ax.set_yscale(spacename)
+        ax.set_xscale(spacename)
+        ax.set_ylim([epsiPlotStart,epsiPlotEnd])
+        ax.set_xlim([sigPlotStart,sigPlotEnd])
+        ax.patch.set_color('grey')
+    s.subplots_adjust(hspace=0.02)
+    s.text(0.05, .5, ylabel, rotation='vertical', horizontalalignment='center', verticalalignment='center', fontsize=20)
+    dSplot.set_xlabel(xlabel, fontsize=20)
+    #Animate the figures
+    realcMaxS = -10**20 #Some really small number
+    realcMinS = 10**20 #some really large number
+    realdcMaxS = -10**20 #Some really small number
+    realdcMinS = 10**20 #some really large number
+    q_ref = q_samp_space[Ref_state]
+    sig_ref = sig_samp_space[Ref_state]
+    epsi_ref = epsi_samp_space[Ref_state]
+    def cleanupiS():
+        imgSplot.set_array([])
+        imgdSplot.set_array([])
+        imgrdSplot.set_array([])
+        stitle.set_text('')
+        S_scatter_ref.set_data([], [])
+        dS_scatter_ref.set_data([], [])
+        S_scatter_noref.set_data([], [])
+        dS_scatter_noref.set_data([], [])
+        Sline.set_data([], [])
+        dSline.set_data([], [])
+        #for iscatter,discatter in zip(Fscatters,dFscatters):
+        #    iscatter.set_data([],[])
+        #    discatter.set_data([],[])
+        if relativeErr:
+            return imgFplot, imgdFplot, imgrdFplot, ftitle, F_scatter_noref, dF_scatter_noref, F_scatter_ref, dF_scatter_ref, Fline, dFline
+        else:
+            return imgSplot, imgdSplot, htitle, S_scatter_noref, dS_scatter_noref, S_scatter_ref, dS_scatter_ref, Sline, dSline
+    def moveqS(qndx):
+        q = q_range[qndx]
+        #I have to create a secondary pcolormesh set since pcolormesh truncates the array size to make the render faster (I dont think pcolor would but would be slower)
+        #If you don't do this, then it creates a weird set of lines which make no sense
+        scrapSig, (scrapS, scrapdS, scraprdS) = plt.subplots(3,1)
+        scrapSplot = scrapS.pcolormesh(sig_range**sig_factor,epsi_range,DelS[qndx,:,:])
+        #Lock down the color choice for the error plot
+        scrapdSplot = scrapdS.pcolormesh(sig_range**sig_factor,epsi_range,dDelS[qndx,:,:], vmax=cdvmaxS, vmin=cdvminS)
+        #Lock down the color choice for the relative error plot
+        scraprdSplot = scraprdS.pcolormesh(sig_range**sig_factor,epsi_range,reldDelS[qndx,:,:],vmax=crdvmaxS, vmin=crdvminS)
+        #Reassign the plots, if you did not use an already generated array, you would need to .ravel() on the array you feed to set_array()
+        imgSplot.set_array(scrapSplot.get_array())
+        imgdSplot.set_array(scrapdSplot.get_array())
+        imgrdSplot.set_array(scraprdSplot.get_array())
+        stitle.set_text(Ssup_title_template % q)
+        Smax = DelS[qndx,:,:].max()
+        Smin = DelS[qndx,:,:].min()
+        dSmax = dDelS[qndx,:,:].max()
+        dSmin = dDelS[qndx,:,:].min()
+        imgSplot.set_clim(vmin=Smin, vmax=Smax)
+        #imgdFplot.set_clim(vmin=dDmin, vmax=dDmax)
+        #Set up the scatters
+        #Set the Q scatters correctly
+        qsampled = numpy.where(q_samp_space == q) #Get all sampled states from the current q value
+        epsi_qsamp = epsi_samp_space[qsampled]
+        sig_qsamp = sig_samp_space[qsampled]
+        S_scatter_noref.set_data(sig_qsamp**sig_factor, epsi_qsamp)
+        dS_scatter_noref.set_data(sig_qsamp**sig_factor, epsi_qsamp)
+        if numpy.any(Ref_state == qsampled[0]):
+            S_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
+            dS_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
+        else:
+            #S_scatter_ref.set_data([], [])
+            #dS_scatter_ref.set_data([], [])
+            S_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
+            dS_scatter_ref.set_data(sig_ref**sig_factor, epsi_ref)
+        if q == 0:
+            Sline.set_data(sig_range**sig_factor, epsi_plot_range)
+            dSline.set_data(sig_range**sig_factor, epsi_plot_range)
+        else:
+            Sline.set_data([], [])
+            dSline.set_data([], [])
+        #Cleanup scrap figure to avoid memory buildup
+        plt.close(scrapSig)
+        if relativeErr:
+            return imgFplot, imgdFplot, imgrdFplot, ftitle, F_scatter_noref, dF_scatter_noref, F_scatter_ref, dF_scatter_ref, Fline, dFline
+        else:
+            return imgSplot, imgdSplot, ftitle, S_scatter_noref, dS_scatter_noref, S_scatter_ref, dS_scatter_ref, Sline, dSline
+    aniS = ani.FuncAnimation(h, moveqS, range(Nparm), interval=150, blit=False, init_func=cleanupS)
+    if relativeErr:
+        filename='Animated_charging_rel{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
+    else:
+        filename='Animated_charging_S{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
+    #pdb.set_trace()
+    aniS.save(filename, dpi=400)
+    #save a single frame
+    #qframe=40
+    #moveqS(qframe)
+    #s.savefig('DelS_Nstate_%i_Qndx_%i.eps' % (nstates, qframe), bbox_inches='tight', dpi=400)
+    #pdb.set_trace()
+
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -1413,38 +1189,6 @@ if __name__ == "__main__":
     parser.add_option("--nstates", dest="nstates", default=None, help="Set the number of states", metavar="NSTATES")
     #nstate options: 24, 32, 40, 49
     (options, args) = parser.parse_args()
-    #if options.nstates is None:
-    #    nstates = 21
-    #else:
-    #    nstates = options.nstates
-    ##epsi_samp_space = numpy.array([0.100, 6.960, 2.667, 1.596, 1.128, 0.870, 0.706, 0.594, 0.513, 0.451, 0.40188])
-    ##sig_samp_space = numpy.array([0.25000, 0.41677, 0.58856, 0.72049, 0.83175, 0.92978, 1.01843, 1.09995, 1.17584, 1.24712, 1.31453])
-    ##!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ##This is the true sigma sampling space because I made a small math error when initially spacing 
-    ##                                0           1            2            3            4            5            6            7            8            9   10   11
-    #sig_samp_space = numpy.array([0.25, 0.57319535, 0.712053172, 0.811158734, 0.890612296, 0.957966253, 1.016984881, 1.069849165, 1.117949319, 1.162232374, 1.2, 0.3])
-    #epsi_samp_space = numpy.append(epsi_samp_space, 0.8)
-    ##Ions 12-25                                             12          13          14          15          16          17          18          19          20          21          22          23          24          25
-    #sig_samp_space  = numpy.append(sig_samp_space, [0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535])
-    #epsi_samp_space = numpy.append(epsi_samp_space,[      0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21])
-    ##Ions 26-35                                             26          27          28          29          30          31          32          33          34          35
-    #sig_samp_space  = numpy.append(sig_samp_space, [0.89830417, 0.89119881, 0.92340246, 0.89588727, 1.11223185, 1.11840500, 1.11239744, 1.10950395, 1.11391239, 0.87474864])
-    #epsi_samp_space = numpy.append(epsi_samp_space,[1.09793856, 3.02251958, 0.76784386, 1.91285202, 0.89731119, 0.64068812, 2.98142758, 2.66769708, 1.81440736, 2.76843218])
-    ##Ions 36-45                                             36           37           38           39           40           41           42           43           44           45          
-    #sig_samp_space  = numpy.append(sig_samp_space, [1.10602708, 0.867445388, 0.807577825, 0.881299638, 1.117410858, 1.113348358, 0.912443052, 0.804213494, 1.108191619, 1.105962702])
-    #epsi_samp_space = numpy.append(epsi_samp_space,[0.982771643, 2.997387823, 0.966241439, 1.852925855, 0.65263393, 1.818471648, 0.703674209, 2.706448907, 2.982717551, 2.71202082])
-    #
-    #
-    #sig3_samp_space = sig_samp_space**3
-    #
-    ##                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,      12,      13,      14,      15,      16,      17,      18,      19,      20,      21,      22,      23,      24,      25 
-    #q_samp_space    = numpy.array([  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0, -2.0000, -1.8516, -1.6903, -1.5119, -1.3093, -1.0690, -0.7559, +2.0000, +1.8516, +1.6903, +1.5119, +1.3093, +1.0690, +0.7559])
-    ##Ions 26-35                                     26      27      28      29       30      31      32       33      34       35
-    #q_samp_space = numpy.append(q_samp_space, [-1.1094, 1.1827, 1.1062, 1.1628, -1.2520, 1.2705, 1.2610, -1.2475, 1.2654, -1.1594])
-    ##Ions 36-45                                     36      37       38      39      40      41      42       43      44       45          
-    #q_samp_space = numpy.append(q_samp_space, [-0.6057, 1.3179, -0.4568, 1.3153, 1.3060, 1.2911, 1.3106, -0.5160, 1.2880, -0.6149])
-    #execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space)
-    ##!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     x = numpy.load('qes.npy')
     qs = x[:,0]
     es = x[:,1]

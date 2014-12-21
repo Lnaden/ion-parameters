@@ -8,7 +8,9 @@ import re
 import pdb
 import esq_construct_ukln as construct_ukln
 
-basessh = 'ssh -i /home/ln8dc/.ssh/fluorinekey fir.itc.virginia.edu ' #Space is required, dont forget it
+#This is a variant on the original iterate to use slurm instead of pdb job queue
+
+basessh = 'ssh rivanna ' #Space is required, dont forget it. This should work with the ssh config file I have to auto complete the rivanna shortcut, and the identiy file
 
 def C6_C12(epsi,sig):
     C6 = 4*epsi*sig**6
@@ -19,13 +21,13 @@ def rsync(files, dest='.', flags=None, direction='to'):
     #files is a string that is the exact command that you send to fluorine
     #basersync = 'rsync -e \'"ssh -i /home/ln8dc/.ssh/fluorinekey"\' ' #required space
     #The escaped single quote around the double is required to get the shlex processor to actually preserve the double quote in the argment pass... a bit annoying, but it works. Without it, the "..." is correctly parsed as a single token, but then the token is passed as a plain string without the "" causing the --rsh command to only interpret the "ssh" part.
-    basersync = 'rsync "-e ssh -i /home/ln8dc/.ssh/fluorinekey" ' #required space
+    basersync = 'rsync ' #required space
     if flags is not None:
         basersync += flags
     if direction is 'to':
-        cmd = basersync + files + ' fir.itc.virginia.edu:/home/ln8dc/ljspherespace/{0}'.format(dest)
+        cmd = basersync + files + ' rivanna:/home/ln8dc/ljspherespace/{0}'.format(dest)
     else:
-        cmd = basersenc + ' fir.itc.virginia.edu:/home/ln8dc/ljspherespace/{0}'.format(dest) + files + ' .'
+        cmd = basersenc + ' rivanna:/home/ln8dc/ljspherespace/{0}'.format(dest) + files + ' .'
     args = shlex.split(cmd)
     p = sp.Popen(args, stdout=sp.PIPE, stderr=sp.PIPE, shell=False).communicate()
     #(stdout, stderr) = p.communicate()
@@ -51,15 +53,19 @@ def gen_file(filepath, Atype, charge, skel):
     top.write(output)
     top.close()
     return
+def jobids_from_submit(submit_str):
+    #Returns the job id's from the submision script
+    return [re.sub(r'[^\d]*(\d+)',r'\1',line) for line in submit_str.split('\n') if re.match(r'[^\d]*\d+') is not None]
 def jobids(qstat_str):
-    return [re.sub(r'(^\d+.lc5).*',r'\1',line) for line in qstat_str.split('\n') if re.match(r'^\d+\.lc5',line) is not None]
+    #Find the job id's from the squeue
+    return [re.sub(r'^ *(\d+).*',r'\1',line) for line in qstat_str.split('\n') if re.match(r'^ *\d+',line) is not None]
     
 def monitor_jobs(jobs, delay=60):
     #Querey the clutser's job id's until all jobs complete
     #Accepts the list of job id's
     all_done = False
     while not all_done:
-        (jobout,errout) = runsh(basessh + 'qstat -u ln8dc', IO=True)
+        (jobout,errout) = runsh(basessh + 'squeue -u ln8dc', IO=True)
         #Process each line, grabbing only the lc5 from the lines
         alllines = jobids(jobout)
         jobsdone= []
@@ -95,26 +101,26 @@ def iterate(continuation=True, start=None):
     #Initilization which will start 
     if start is None or start == 'equilibrate':
         print "Equilibrating"
-        runsh(basessh + 'sh /home/ln8dc/ljspherespace/copy_skel.sh {0:d}'.format(nlj-1)) #Generates the skelton script
+        runsh(basessh + 'sh /home/ln8dc/ljspherespace/scopy_skel.sh {0:d}'.format(nlj-1)) #Generates the skelton script
         #2) Run the Equilibration of new states
         #    2a) Wait
         #Start the execution of jobs
-        (out, err) = runsh(basessh + 'sh /home/ln8dc/ljspherespace/submit_equil_esq.sh {0:d} {1:d}'.format(old_nlj, nlj-1), IO=True) #Generates the skelton script
-        lstout = [re.sub(r'(^\d+.lc5).*',r'\1',line) for line in out.split('\n') if re.match(r'^\d+\.lc5',line) is not None]
+        (out, err) = runsh(basessh + 'sh /home/ln8dc/ljspherespace/ssubmit_equil_esq.sh {0:d} {1:d}'.format(old_nlj, nlj-1), IO=True) #Generates the skelton script
+        lstout = jobids_from_submit(out)
         #Add a delay to make sure the jobs make it to the que (~5-10 seconds seems to be enough)
         sleep(8)
         #Monitor for job completion
         monitor_jobs(lstout)
         #Cleanup
-        runsh(basessh + 'rm /bigtmp/ln8dc/ljsphere_es/equilibrate*')
+        runsh(basessh + 'rm /scratch/ln8dc/ljsphere_es/equilibrate*')
         start = None
     if start is None or start == 'production':
         print "Production Simulation"
         #3) Run the production of the new states
         #    3a) Wait on NEW states
         #Start the execution of production
-        (out, err) = runsh(basessh + 'sh /home/ln8dc/ljspherespace/submit_lj_esq.sh {0:d} {1:d}'.format(old_nlj, nlj-1), IO=True) #Generates the skelton script
-        lstout = jobids(out)
+        (out, err) = runsh(basessh + 'sh /home/ln8dc/ljspherespace/ssubmit_lj_esq.sh {0:d} {1:d}'.format(old_nlj, nlj-1), IO=True) #Generates the skelton script
+        lstout = jobids_from_submit(out)
         #Add a delay to make sure the jobs make it to the que (~5-10 seconds seems to be enough)
         sleep(8)
         #Monitor for job completion
@@ -123,14 +129,14 @@ def iterate(continuation=True, start=None):
     if start is None or start =='g_t':
         print "Measuring Timeseries"
         #6) Find g_t for all new states
-        runsh(basessh + '\"cd /home/ln8dc/ljspherespace; python /home/ln8dc/ljspherespace/find_g_t.py {0:d} {1:d}\"'.format(old_nlj,nlj))
+        runsh(basessh + '\"cd /home/ln8dc/ljspherespace; python /home/ln8dc/ljspherespace/sfind_g_t.py {0:d} {1:d}\"'.format(old_nlj,nlj))
         start = None
     if start is None or start == 'subsample':
         print "Subsampling"
         #7) Subsample new states with the g_t
-        (subout, suberr) = runsh(basessh + '\"cd /home/ln8dc/ljspherespace; sh /home/ln8dc/ljspherespace/submit_subsample.sh {0:d} {1:d}\"'.format(old_nlj,nlj-1), IO=True)
+        (subout, suberr) = runsh(basessh + '\"cd /home/ln8dc/ljspherespace; sh /home/ln8dc/ljspherespace/ssubmit_subsample.sh {0:d} {1:d}\"'.format(old_nlj,nlj-1), IO=True)
         sleep(8)
-        lstout = jobids(subout)
+        lstout = jobids_from_submit(subout)
         monitor_jobs(lstout)
         start = None
     if start is None or start == 'kln':
@@ -155,19 +161,19 @@ def iterate(continuation=True, start=None):
             newout = ''
             newerr = ''
         totalout = oldout + '\n' + newout
-        klnids = jobids(totalout)
+        klnids = jobids_from_submit(totalout)
         sleep(8)
         monitor_jobs(klnids)
         #Cleanup
-        runsh(basessh + 'rm /bigtmp/ln8dc/ljsphere_es/rerun*')
+        runsh(basessh + 'rm /scratch/ln8dc/ljsphere_es/rerun*')
         start = None
     if start is None or start == 'xvgcopy':
         print "Moving XVG Files"
         #9) Copy xvg files from ALL states to Fl
         #    9a) Copy all files to argon
         xvgflags='--exclude="*.top" --include="lj*" --include="prod" --include="*.xvg" --exclude="*" '
-        basersync = 'rsync "-e ssh -i /home/ln8dc/.ssh/fluorinekey" -rv ' #required space
-        cmd = basersync + xvgflags + ' fir.itc.virginia.edu:/bigtmp/ln8dc/ljsphere_es/.' + ' .' #Grab xvg files from bigtmp and move them here
+        basersync = 'rsync -rv ' #required space
+        cmd = basersync + xvgflags + ' rivanna:/scratch/ln8dc/ljsphere_es/.' + ' .' #Grab xvg files from scratch and move them here
         args = shlex.split(cmd)
         p = sp.Popen(args, stdout=sp.PIPE, stderr=sp.PIPE, shell=False).communicate()
         start=None
@@ -255,7 +261,7 @@ def iterate(continuation=True, start=None):
 
 if __name__ == "__main__":
     continuation = True
-    iterations = 5
+    iterations = 3
     #startfrom = None
     #startfrom = 'free energy'
     startfrom = 'equilibrate'
