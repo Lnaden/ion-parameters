@@ -526,7 +526,7 @@ if __name__=="__main__":
         C12map = lambda x: ((C12_max - C12_min)*x + C12_min)*kjpermolTokcal
         C6map = lambda x: ((C6_max - C6_min)*x + C6_min)*kjpermolTokcal
         #ylabel = r'$\epsilon$ in kcal/mol'
-        ylabel = r'$\epsilon$ in kJ/mol'
+        ylabel = r'$\epsilon$ in kcal/mol'
         if sig_factor != 3:
             xlabel = r'$\sigma$ in nm'
         else:
@@ -539,14 +539,30 @@ if __name__=="__main__":
     lam_C12 = C12map(lam_range)
     lam_C6 = C6map(lam_range)
         
+    f = {}
+    plots = {}
     #Plot the sigma and epsilon free energies
-    f,plots = plt.subplots(2,2,sharex=True, sharey=True, figsize=(11,6))
-    Fplot = {'11':plots[0,0],'12':plots[0,1]}
-    dFplot = {'11':plots[1,0],'12':plots[1,1]}
+    #f,plots = plt.subplots(2,2,sharex=True, sharey=True, figsize=(11,6))
+    #f,plots = plt.subplots(2,2,sharex=True, sharey=True, figsize=(11,6))
+    f['11'],plots['11'] = plt.subplots(2,1,sharex=True)
+    f['12'],plots['12'] = plt.subplots(2,1,sharex=True)
+    Fplot = {'11':plots['11'][0],'12':plots['12'][0]}
+    dFplot = {'11':plots['11'][1],'12':plots['12'][1]}
+    #dFplot = {'11':plots[1,0],'12':plots[1,1]}
     print "Filling figures with data..."
     '''
     Observant readers will notice that DelF and dDelF are in dimensions of [epsi,sig] but I plot in sig,epsi. That said, the color map is CORRECT with this method... somehow. I questioned it once and then decided to come back to it at a later date.
     '''
+    #Convert epsi to kcal
+    epsi_range *= kjpermolTokcal
+    epsi_samp_space *= kjpermolTokcal
+    realepsi *= kjpermolTokcal
+    anrealepsi *= kjpermolTokcal
+    epsiEndSpace *= kjpermolTokcal
+    epsiPlotStart *= kjpermolTokcal
+    epsiPlotEnd *= kjpermolTokcal
+    epsi_plot_range *= kjpermolTokcal
+
     imgFplot={}
     imgdFplot ={}
     divFplot = {}
@@ -560,32 +576,32 @@ if __name__=="__main__":
         #Set the colorbar on the 12 state
         cvmin, cvmax = (-14.542572154421956, 8.6595207877425739)
         cdvmin, cdvmax = (3.1897634261829015e-05, 0.22292838017499619) 
-        if nstates == '12':
+        if nstates == '12' or True:
             divFplot[nstates] = mal(Fplot[nstates])
             caxFplot[nstates] = divFplot[nstates].append_axes('right', size='5%', pad=0.05)
-            cFplot[nstates] = f.colorbar(imgFplot[nstates], cax=caxFplot[nstates])
+            cFplot[nstates] = f[nstates].colorbar(imgFplot[nstates], cax=caxFplot[nstates])
             #set the minmax colorscales
             #print cFplot.get_clim()
             #cvmin, cvmax = (-21.971123537881027, 20.78176716595965) #These are the 11 nstate plots
             cFplot[nstates].set_clim(vmin=cvmin, vmax=cvmax)
             #Reduce the number of ticks
-            tick_locator = ticker.MaxNLocator(nbins=5)
-            cFplot[nstates].locator = tick_locator
-            cFplot[nstates].update_ticks()
+            #tick_locator = ticker.MaxNLocator(nbins=5)
+            #cFplot[nstates].locator = tick_locator
+            #cFplot[nstates].update_ticks()
         #Error plot
         imgdFplot[nstates] = dFplot[nstates].pcolormesh(sig_range**sig_factor,epsi_range,dDelF[nstates]/kjpermolTokT*kjpermolTokcal)
-        if nstates == '12':
+        if nstates == '12' or True:
             divdFplot[nstates] = mal(dFplot[nstates])
             caxdFplot[nstates] = divdFplot[nstates].append_axes('right', size='5%', pad=0.05)
             #Set the minmax colorscales
             #print imgdFplot.get_clim()
             #cdvmin, cdvmax = (0.00019094581786378227, 0.45022226894935008) #These are the 11 nstate plots
             #sys.exit(0)
-            cdFplot[nstates] = f.colorbar(imgdFplot[nstates], cax=caxdFplot[nstates])
+            cdFplot[nstates] = f[nstates].colorbar(imgdFplot[nstates], cax=caxdFplot[nstates])
             #Reduce the number of ticks
-            dtick_locator = ticker.MaxNLocator(nbins=5)
-            cdFplot[nstates].locator = dtick_locator
-            cdFplot[nstates].update_ticks()
+            #dtick_locator = ticker.MaxNLocator(nbins=5)
+            #cdFplot[nstates].locator = dtick_locator
+            #cdFplot[nstates].update_ticks()
         imgdFplot[nstates].set_clim(vmin=cdvmin, vmax=cdvmax)
         #!!! Uncomment this to remake the title
         #f.suptitle(r'$\Delta G$ (top) and $\delta\Delta G$(bottom) for LJ Spheres' + '\n in units of kcal/mol')
@@ -660,7 +676,7 @@ if __name__=="__main__":
         for ax in [Fplot[nstates],dFplot[nstates]]:
             ax.set_yscale(spacename)
             ax.set_xscale(spacename)
-            if nstates == '11':
+            if nstates == '11' or True:
                 ax.set_ylim([epsiPlotStart,epsiPlotEnd])
             ax.set_xlim([sigPlotStart,sigPlotEnd])
             ax.patch.set_color('grey')
@@ -668,26 +684,34 @@ if __name__=="__main__":
             ax.locator_params(nbins=5)
         #dFplot[nstates].set_xlabel(xlabel, fontsize=20)
         #Fplot[nstates].set_title('Number of\nsampled states: %i'%int(nstates),fontsize=15)
-    f.subplots_adjust(hspace=0.02, wspace=0.02, top=.91, left=.1, right=.88)
-    f.text(0.04, .5, ylabel, rotation='vertical', horizontalalignment='center', verticalalignment='center', fontsize=21)
-    f.text(0.5, .04, xlabel,  horizontalalignment='center', verticalalignment='center', fontsize=21)
-    #Name of each plot
-    f.text(0.965, .71, r'$\Delta G$',  horizontalalignment='center', verticalalignment='center', fontsize=21)
-    f.text(0.965, .27, r'$\delta\left(\Delta G\right)$',  horizontalalignment='center', verticalalignment='center', fontsize=21)
-    if savefigs:
-        print "Rendering figures..."
-        if plotReal:
-            plotrealstr = "T"
-        else:
-            plotrealstr = "F"
-        f.patch.set_alpha(0.0)
-        #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%2d.png' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace*10), bbox_inches='tight', dpi=600)  
-        f.savefig('LJParameterizationComparison.png', bbox_inches='tight', dpi=600)  
-        #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
-        #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.pdf' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
-        #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
-    else:
-        plt.show()
+        f[nstates].subplots_adjust(hspace=0.02, wspace=0.02, top=.91, left=.1, right=.88)
+        f[nstates].text(0.04, .5, ylabel, rotation='vertical', horizontalalignment='center', verticalalignment='center', fontsize=21)
+        f[nstates].text(0.5, .04, xlabel,  horizontalalignment='center', verticalalignment='center', fontsize=21)
+        #Name of each plot
+        f[nstates].text(0.965, .71, r'$\Delta G$',  rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+        f[nstates].text(0.965, .27, r'$\delta\left(\Delta G\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+    #Fplot['11'].set_title('11 Sampled States')
+    #Fplot['12'].set_title('Naive additional sampling at 12 states')
+        if savefigs:
+            f[nstates].patch.set_alpha(0.0)
+            f[nstates].savefig('LJParameterization_nstates%s.png' % nstates, bbox_inches='tight', dpi=600)  
+    
+    #if savefigs:
+    #    print "Rendering figures..."
+    #    if plotReal:
+    #        plotrealstr = "T"
+    #    else:
+    #        plotrealstr = "F"
+    #    f.patch.set_alpha(0.0)
+    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%2d.png' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace*10), bbox_inches='tight', dpi=600)  
+    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%2d.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace*10), bbox_inches='tight', dpi=600)
+    #    f.savefig('LJParameterizationComparison.png', bbox_inches='tight', dpi=600)  
+    #    #f.savefig('LJParameterizationComparison.eps', bbox_inches='tight')  
+    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
+    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.pdf' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
+    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
+    #else:
+    #    plt.show()
     #pdb.set_trace()
     sys.exit(0) #Terminate here
 ####################################################################################
