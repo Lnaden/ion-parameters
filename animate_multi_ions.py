@@ -6,7 +6,7 @@ Ref_state = 1
 #Adjust this list to get your image, figure dynamicly updates
 nstates = [21, 31, 41, 51, 61]
 nstates = [21,69]
-nstates = [21]
+nstates = [21, 211]
 
 def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     epsi_min = epsi_samp_space[0]
@@ -77,7 +77,11 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     
     print 'Initilizing figures...'
     xlabel = r'$\sigma$ in nm'
-    ylabel = r'$\epsilon$ in kJ/mol'
+    ylabel = r'$\epsilon$ in kcal/mol' 
+    #Convert epsi to kcal
+    epsiPlotStart *= kjpermolTokcal
+    epsiPlotEnd *= kjpermolTokcal
+    epsi_range *= kjpermolTokcal
     
     relativeErr = False
     fixErr = False
@@ -136,7 +140,7 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
         titlefontsize = 12
         #ftitle = f.suptitle('', fontsize = titlefontsize)
         #ftitle = f.suptitle(sup_title_template, fontsize = titlefontsize, horizontalalignment='right')
-        ftitle = f.suptitle(sup_title_template, fontsize = titlefontsize)
+        #ftitle = f.suptitle(sup_title_template, fontsize = titlefontsize)
         q_title_template = r"$q=%.2f$"
         qtitle = f.text(0.85, 0.95, '', fontsize=20)
         for ax in daplots.ravel():
@@ -221,6 +225,11 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     aniU = ani.FuncAnimation(f, moveq, range(Nparm), interval=200, blit=False, init_func=cleanup)
     #pdb.set_trace()
     aniU.save(filename, dpi=400)
+    #save a single frame
+    #qframe=[0,40]
+    #moveq(qframe)
+    #f.patch.set_alpha(0.0)
+    #f.save_fig
 
 if __name__=="__main__":
     parms = numpy.load('qes.npy')
