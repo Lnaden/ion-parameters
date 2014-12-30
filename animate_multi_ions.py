@@ -6,7 +6,7 @@ Ref_state = 1
 #Adjust this list to get your image, figure dynamicly updates
 nstates = [21, 31, 41, 51, 61]
 nstates = [21,69]
-nstates = [21, 211]
+nstates = [21, 33, 37]
 
 def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     epsi_min = epsi_samp_space[0]
@@ -60,9 +60,9 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
                 #if includeRef:
                 #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+1:]
                 #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+1:]
-                #Unwrap the data
-                DelF[state][iq, iepsi,:] = DeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                dDelF[state][iq, iepsi,:] = dDeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                #Unwrap the data, reference state is in k=0, account for offseet to actual data by +1 the l range
+                DelF[state][iq, iepsi,:] = DeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                dDelF[state][iq, iepsi,:] = dDeltaF_ij[0,1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
         sys.stdout.write('\n')
         reldDelF[state] = numpy.abs(dDelF[state]/DelF[state])
         if numpy.nanmin(dDelF[state]) < minerr:
@@ -141,6 +141,8 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
         #ftitle = f.suptitle('', fontsize = titlefontsize)
         #ftitle = f.suptitle(sup_title_template, fontsize = titlefontsize, horizontalalignment='right')
         #ftitle = f.suptitle(sup_title_template, fontsize = titlefontsize)
+        f.text(0.965, .71, r'$\Delta G$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+        f.text(0.965, .27, r'$\delta\left(\Delta G\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
         q_title_template = r"$q=%.2f$"
         qtitle = f.text(0.85, 0.95, '', fontsize=20)
         for ax in daplots.ravel():
@@ -226,10 +228,11 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     #pdb.set_trace()
     aniU.save(filename, dpi=400)
     #save a single frame
-    #qframe=[0,40]
-    #moveq(qframe)
-    #f.patch.set_alpha(0.0)
-    #f.save_fig
+#    qframe=[0, 33, 38]
+#    for frame in qframe:
+#        moveq(frame)
+#        f.patch.set_alpha(0.0)
+#        f.savefig('SingleFrame_n%s_f%d.png' % (statenames, frame), bbox_inches='tight', dpi=600)
 
 if __name__=="__main__":
     parms = numpy.load('qes.npy')

@@ -711,28 +711,21 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             print "Q index: %i/%i" % (iq, Nparm-1)
             #Using PerturpedFreeEnergies instead of recreating the MBAR object every time. Saves time with same accuracy
             #Perturbed assumes all l states are unsampled
-            u_kln_P = numpy.zeros([nstates,Nparm**2,maxN]) 
+            u_kln_P = numpy.zeros([nstates,Nparm**2 + 1,maxN]) #Account for the reference state
+            #Fill in the reference state
+            u_kln_P[:,0,:] = energies.u_kln[:,Ref_state,:]
             #Save data files
             if not (os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq)) and savedata) or timekln: #nand gate + timing flag
                 for iepsi in xrange(Nparm):
                     epsi = epsi_range[iepsi]
                     #Create Sub matrix
-                    #u_kln_sub = numpy.zeros([Nallstates,Nallstates,niterations])
-                    #u_kln_sub[:nstates,:nstates,:] = u_kln
-                    #DEBUG: Rebuild the reference state
-                    #if includeRef:
-                    #    Repsi = epsi_samp_space[Ref_state]
-                    #    Rsig = sig_samp_space[Ref_state]
-                    #    u_kln_sub[:nstates,nstates,:] = flamC12sqrt(Repsi,Rsig)*const_R_matrix + flamC6sqrt(Repsi,Rsig)*const_A_matrix + const_unaffected_matrix
                     for isig in xrange(Nparm):
                         sig = sig_range[isig]
                         lndx = isig + (iepsi*Nparm)
-                        #u_kln_sub[:nstates,isig+nstates+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix + flamC6sqrt(epsi,sig)*const_A_matrix + flamC1(q)*const_q_matrix + flamC1(q)**2*const_q2_matrix + const_unaffected_matrix
-                        #u_kln_P[:,lndx+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix[:,:maxN] + flamC6sqrt(epsi,sig)*const_A_matrix[:,:maxN] + flamC1(q)*const_q_matrix[:,:maxN] + flamC1(q)**2*const_q2_matrix[:,:maxN] + const_unaffected_matrix[:,:maxN]
-                        u_kln_P[:,lndx+offset,:] = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
+                        #Offset by the refference state 
+                        u_kln_P[:,lndx+1,:] = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
                 if not timekln:
-                    #mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
-                    #(DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
+                    #Get free energies relative to the reference state (the index l=0)
                     (DeltaF_ij, dDeltaF_ij) = comp.mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew-kab')
                 if savedata and not timekln:
                     if not os.path.isdir('esq_%s' % spacename):
@@ -748,9 +741,9 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     #if includeRef:
                     #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+offset:]
                     #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+offset:]
-                    #Unwrap the data
-                    DelF[iq, iepsi,:] = DeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    #Unwrap the data, reference state is in state 0
+                    DelF[iq, iepsi,:] = DeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    dDelF[iq, iepsi,:] = dDeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
             laptime = time.clock()
             # Show timing statistics. copied from Repex.py, copywrite John Chodera
             final_time = time.time()
@@ -778,9 +771,9 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     #if includeRef:
                     #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+1:]
                     #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+1:]
-                    #Unwrap the data
-                    DelF[iq, iepsi,:] = DeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    #Unwrap the datam reference state is in sate 0
+                    DelF[iq, iepsi,:] = DeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    dDelF[iq, iepsi,:] = dDeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
             sys.stdout.write('\n')
         else:
             figdata = numpy.load('esq_freeEnergies%s.npz'%spacename)
