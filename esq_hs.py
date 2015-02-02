@@ -713,7 +713,9 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             print "Q index: %i/%i" % (iq, Nparm-1)
             #Using PerturpedFreeEnergies instead of recreating the MBAR object every time. Saves time with same accuracy
             #Perturbed assumes all l states are unsampled
-            u_kln_P = numpy.zeros([nstates,Nparm**2,maxN]) 
+            u_kln_P = numpy.zeros([nstates,Nparm**2 + 1,maxN]) 
+            #Fill in ref state
+            u_kln_P[:,0,:] = energies.u_kln[:,Ref_state,:]
             #Save data files
             if not (os.path.isfile('hs_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq)) and savedata) or timekln: #nand gate + timing flag
                 for iepsi in xrange(Nparm):
@@ -729,19 +731,15 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     for isig in xrange(Nparm):
                         sig = sig_range[isig]
                         lndx = isig + (iepsi*Nparm)
-                        #u_kln_sub[:nstates,isig+nstates+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix + flamC6sqrt(epsi,sig)*const_A_matrix + flamC1(q)*const_q_matrix + flamC1(q)**2*const_q2_matrix + const_unaffected_matrix
-                        #u_kln_P[:,lndx+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix[:,:maxN] + flamC6sqrt(epsi,sig)*const_A_matrix[:,:maxN] + flamC1(q)*const_q_matrix[:,:maxN] + flamC1(q)**2*const_q2_matrix[:,:maxN] + const_unaffected_matrix[:,:maxN]
-                        u_kln_P[:,lndx+offset,:] = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
+                        u_kln_P[:,lndx+1,:] = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
                 if not timekln:
-                    #mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
-                    #(DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-                    (DeltaF_ij, dDeltaF_ij, DeltaU_ij, dDeltaU_ij, deltaS_ij, dDeltaS_ij) = comp.mbar.computePerturbedEntropyandEnthalpy(u_kln_P, uncertainty_method='svd-ew-kab')
+                    (DeltaF_ij, dDeltaF_ij, DeltaU_ij, dDeltaU_ij, DeltaS_ij, dDeltaS_ij) = comp.mbar.computePerturbedEntropyAndEnthalpy(u_kln_P, uncertainty_method='svd-ew-kab', testM='new')
                 if savedata and not timekln:
                     if not os.path.isdir('hs_%s' % spacename):
                         os.makedirs('hs_%s' % spacename) #Create folder
-                    savez('hs_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij, DeltaU_ij=DeltaU_ij, dDeltaU_ij=dDeltau_ij, DeltaS_ij=DeltaS_ij, dDeltaS_ij=dDeltaS_ij) #Save file
+                    savez('hs_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij, DeltaU_ij=DeltaU_ij, dDeltaU_ij=dDeltaU_ij, DeltaS_ij=DeltaS_ij, dDeltaS_ij=dDeltaS_ij) #Save file
             else:
-                DeltaF_file = numpy.load('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq))
+                DeltaF_file = numpy.load('hs_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, iq))
                 DeltaF_ij = DeltaF_file['DeltaF_ij']
                 dDeltaF_ij = DeltaF_file['dDeltaF_ij']
                 DeltaU_ij = DeltaF_file['DeltaU_ij']
@@ -755,12 +753,12 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+offset:]
                     #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+offset:]
                     #Unwrap the data
-                    DelF[iq, iepsi,:] = DeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    DelU[iq, iepsi,:] = DeltaU_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    dDelU[iq, iepsi,:] = dDeltaU_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    DelS[iq, iepsi,:] = DeltaS_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    dDelS[iq, iepsi,:] = dDeltaS_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    DelF[iq, iepsi,:] = DeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    dDelF[iq, iepsi,:] = dDeltaF_ij[0, 1 + iepsi*Nparm:1+ (iepsi+1)*Nparm]
+                    DelU[iq, iepsi,:] = DeltaU_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    dDelU[iq, iepsi,:] = dDeltaU_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    DelS[iq, iepsi,:] = DeltaS_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    dDelS[iq, iepsi,:] = dDeltaS_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
             laptime = time.clock()
             # Show timing statistics. copied from Repex.py, copywrite John Chodera
             final_time = time.time()
@@ -794,12 +792,12 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+1:]
                     #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+1:]
                     #Unwrap the data
-                    DelF[iq, iepsi,:] = DeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    dDelF[iq, iepsi,:] = dDeltaF_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    DelU[iq, iepsi,:] = DeltaU_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    dDelU[iq, iepsi,:] = dDeltaU_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    DelS[iq, iepsi,:] = DeltaS_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
-                    dDelS[iq, iepsi,:] = dDeltaS_ij[Ref_state, iepsi*Nparm:(iepsi+1)*Nparm]
+                    DelF[iq, iepsi,:] = DeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    dDelF[iq, iepsi,:] = dDeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    DelU[iq, iepsi,:] = DeltaU_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    dDelU[iq, iepsi,:] = dDeltaU_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    DelS[iq, iepsi,:] = DeltaS_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
+                    dDelS[iq, iepsi,:] = dDeltaS_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
             sys.stdout.write('\n')
     ###############################################
     ######### END FREE ENERGY CALCULATIONS ########
@@ -865,8 +863,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     import matplotlib.animation as ani
     cvmax = DelF.max()*1.01
     cvmin = DelF.min()*1.01
-    cvmaxH = DelH.max()*1.01
-    cvminH = DelH.min()*1.01
+    cvmaxH = DelU.max()*1.01
+    cvminH = DelU.min()*1.01
     cvmaxS = DelS.max()*1.01
     cvminS = DelS.min()*1.01
     #Set the default error tolerance
@@ -885,43 +883,64 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         cdvminH = errorlimitsH[0]
         cdvmaxH = errorlimitsH[1]
     except:
-        cdvminH = dDelH.min()*1.01
-        cdvmaxH = dDelH.max()*1.01
+        #cdvminH = dDelU.min()*1.01
+        #cdvmaxH = dDelU.max()*1.01
+        cdvminH = numpy.nanmin(dDelU)*0.99
+        cdvmaxH = numpy.nanmax(dDelU)*1.01
+        cdvmaxH = numpy.nanmean(dDelU) + 0.1*numpy.nanstd(dDelU)
+        #Set to same scale as dDelF at n21
+        if nstates == 21:        
+            cdvmaxH = 53.405545268981086 * 1.01
+        else:
+            cdvmaxH = numpy.nanmax(dDelU)*1.01
+     
         if nstates == 24:
-            numpy.save('n24H_error_lims.npy', numpy.array([dDelH.min()*1.01, dDelH.max()*1.01]))
+            numpy.save('n24H_error_lims.npy', numpy.array([dDelU.min()*1.01, dDelU.max()*1.01]))
     try: #S
         errorlimitsS = numpy.load('n24S_error_lims.npy')
         cdvminS = errorlimitsS[0]
         cdvmaxS = errorlimitsS[1]
     except:
-        cdvminS = dDelS.min()*1.01
-        cdvmaxS = dDelS.max()*1.01
+        #cdvminS = dDelS.min()*1.01
+        #cdvmaxS = dDelS.max()*1.01
+        cdvminS = numpy.nanmin(dDelS)*0.99
+        cdvmaxS = numpy.nanmax(dDelS)*1.01
+        cdvmaxS = numpy.nanmean(dDelS) + 0.1*numpy.nanstd(dDelS)
+        if nstates == 21:        
+            cdvmaxS = 53.405545268981086 * 1.01
+        else:
+            cdvmaxS = numpy.nanmax(dDelS)*1.01
         if nstates == 24:
             numpy.save('n24S_error_lims.npy', numpy.array([dDelS.min()*1.01, dDelS.max()*1.01]))
-    try:
-        relerrlims = numpy.load('max_rel_err_lims.npy')
-        crdvmin = relerrlims[0]
-        crdvmax = relerrlims[1]
-        #curmax = reldDelF.max()*1.01
-        curmax = reldDelF.mean() + 2*numpy.sqrt(reldDelF.var())
-        if curmax > crdvmax:
-            print 'Max relative error exceeded, extending maximum to %f' % curmax
-            numpy.save('max_rel_err_lims.npy', numpy.array([0,curmax]))
-    except:
-        crdvmin = 0
-        #crdvmax = reldDelF.max()*1.01
-        crdvmax = reldDelF.mean() + 2*numpy.sqrt(reldDelF.var())
-        numpy.save('max_rel_err_lims.npy', numpy.array([0,crdvmax]))
+    if relativeErr:
+        try:
+            relerrlims = numpy.load('max_rel_err_lims.npy')
+            crdvmin = relerrlims[0]
+            crdvmax = relerrlims[1]
+            #curmax = reldDelF.max()*1.01
+            curmax = reldDelF.mean() + 2*numpy.sqrt(reldDelF.var())
+            if curmax > crdvmax:
+                print 'Max relative error exceeded, extending maximum to %f' % curmax
+                numpy.save('max_rel_err_lims.npy', numpy.array([0,curmax]))
+        except:
+            crdvmin = 0
+            #crdvmax = reldDelF.max()*1.01
+            crdvmax = reldDelF.mean() + 2*numpy.sqrt(reldDelF.var())
+            numpy.save('max_rel_err_lims.npy', numpy.array([0,crdvmax]))
 
-    #Plot H
-    imgHplot = Hplot.pcolormesh(sig_range**sig_factor,epsi_range,DelH[(Nparm-1)/2,:,:])
+    q_title_template = r"$q=%.2f$"
+    #Plot H#
+    Hqtitle = h.text(0.85, 0.95, '', fontsize=20)
+    h.text(0.98, .71, r'$\Delta H$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+    h.text(0.98, .27, r'$\delta\left(\Delta H\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+    imgHplot = Hplot.pcolormesh(sig_range**sig_factor,epsi_range,DelU[(Nparm-1)/2,:,:])
     #Set the colorbar
     divHplot = mal(Hplot)
     caxHplot = divHplot.append_axes('right', size='5%', pad=0.05)
     cHplot = h.colorbar(imgHplot, cax=caxHplot)
     #set the minmax colorscales
     ####### Error plot #######
-    imgdHplot = dHplot.pcolormesh(sig_range**sig_factor,epsi_range,dDelH[(Nparm-1)/2,:,:])
+    imgdHplot = dHplot.pcolormesh(sig_range**sig_factor,epsi_range,dDelU[(Nparm-1)/2,:,:])
     divdHplot = mal(dHplot)
     caxdHplot = divdHplot.append_axes('right', size='5%', pad=0.05)
     #Set the minmax colorscales
@@ -948,7 +967,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     noref = noref.compressed()
     scatter_epsis = epsi_samp_space[noref]
     scatter_sig = sig_samp_space[noref]
-    for ax in plotlist:
+    for ax in Hplotlist:
         ax.set_yscale(spacename)
         ax.set_xscale(spacename)
         ax.set_ylim([epsiPlotStart,epsiPlotEnd])
@@ -965,10 +984,10 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     q_ref = q_samp_space[Ref_state]
     sig_ref = sig_samp_space[Ref_state]
     epsi_ref = epsi_samp_space[Ref_state]
-    def cleanupiH():
+    def cleanupH():
         imgHplot.set_array([])
         imgdHplot.set_array([])
-        imgrdHplot.set_array([])
+        #imgrdHplot.set_array([])
         htitle.set_text('')
         H_scatter_ref.set_data([], [])
         dH_scatter_ref.set_data([], [])
@@ -979,29 +998,31 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         #for iscatter,discatter in zip(Fscatters,dFscatters):
         #    iscatter.set_data([],[])
         #    discatter.set_data([],[])
+        Hqtitle.set_text('')
         if relativeErr:
             return imgFplot, imgdFplot, imgrdFplot, ftitle, F_scatter_noref, dF_scatter_noref, F_scatter_ref, dF_scatter_ref, Fline, dFline
         else:
-            return imgHplot, imgdHplot, htitle, H_scatter_noref, dH_scatter_noref, H_scatter_ref, dH_scatter_ref, Hline, dHline
+            return imgHplot, imgdHplot, htitle, H_scatter_noref, dH_scatter_noref, H_scatter_ref, dH_scatter_ref, Hline, dHline, Hqtitle
     def moveqH(qndx):
         q = q_range[qndx]
         #I have to create a secondary pcolormesh set since pcolormesh truncates the array size to make the render faster (I dont think pcolor would but would be slower)
         #If you don't do this, then it creates a weird set of lines which make no sense
         scrapHig, (scrapH, scrapdH, scraprdH) = plt.subplots(3,1)
-        scrapHplot = scrapH.pcolormesh(sig_range**sig_factor,epsi_range,DelH[qndx,:,:])
+        scrapHplot = scrapH.pcolormesh(sig_range**sig_factor,epsi_range,DelU[qndx,:,:])
         #Lock down the color choice for the error plot
-        scrapdHplot = scrapdH.pcolormesh(sig_range**sig_factor,epsi_range,dDelH[qndx,:,:], vmax=cdvmaxH, vmin=cdvminH)
+        scrapdHplot = scrapdH.pcolormesh(sig_range**sig_factor,epsi_range,dDelU[qndx,:,:], vmax=cdvmaxH, vmin=cdvminH)
         #Lock down the color choice for the relative error plot
-        scraprdHplot = scraprdH.pcolormesh(sig_range**sig_factor,epsi_range,reldDelH[qndx,:,:],vmax=crdvmaxH, vmin=crdvminH)
+        #scraprdHplot = scraprdH.pcolormesh(sig_range**sig_factor,epsi_range,reldDelU[qndx,:,:],vmax=crdvmaxH, vmin=crdvminH)
         #Reassign the plots, if you did not use an already generated array, you would need to .ravel() on the array you feed to set_array()
         imgHplot.set_array(scrapHplot.get_array())
         imgdHplot.set_array(scrapdHplot.get_array())
-        imgrdHplot.set_array(scraprdHplot.get_array())
-        htitle.set_text(Hsup_title_template % q)
-        Hmax = DelH[qndx,:,:].max()
-        Hmin = DelH[qndx,:,:].min()
-        dHmax = dDelH[qndx,:,:].max()
-        dHmin = dDelH[qndx,:,:].min()
+        #imgrdHplot.set_array(scraprdHplot.get_array())
+        #htitle.set_text(Hsup_title_template % q)
+        Hqtitle.set_text(q_title_template % q)
+        Hmax = DelU[qndx,:,:].max()
+        Hmin = DelU[qndx,:,:].min()
+        dHmax = dDelU[qndx,:,:].max()
+        dHmin = dDelU[qndx,:,:].min()
         imgHplot.set_clim(vmin=Hmin, vmax=Hmax)
         #imgdFplot.set_clim(vmin=dDmin, vmax=dDmax)
         #Set up the scatters
@@ -1025,12 +1046,19 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         else:
             Hline.set_data([], [])
             dHline.set_data([], [])
+        Hline.set_data([], [])
+        dHline.set_data([], [])
+        H_scatter_ref.set_data([], [])
+        dH_scatter_ref.set_data([], [])
+        H_scatter_noref.set_data([], [])
+        dH_scatter_noref.set_data([], [])
         #Cleanup scrap figure to avoid memory buildup
         plt.close(scrapHig)
         if relativeErr:
             return imgFplot, imgdFplot, imgrdFplot, ftitle, F_scatter_noref, dF_scatter_noref, F_scatter_ref, dF_scatter_ref, Fline, dFline
         else:
-            return imgHplot, imgdHplot, ftitle, H_scatter_noref, dH_scatter_noref, H_scatter_ref, dH_scatter_ref, Hline, dHline
+            #return imgHplot, imgdHplot, htitle, H_scatter_noref, dH_scatter_noref, H_scatter_ref, dH_scatter_ref, Hline, dHline
+            return imgHplot, imgdHplot, H_scatter_noref, dH_scatter_noref, H_scatter_ref, dH_scatter_ref, Hline, dHline, Hqtitle
     aniH = ani.FuncAnimation(h, moveqH, range(Nparm), interval=150, blit=False, init_func=cleanupH)
     if relativeErr:
         filename='Animated_charging_rel{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
@@ -1039,9 +1067,10 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #pdb.set_trace()
     aniH.save(filename, dpi=400)
     #save a single frame
-    #qframe=40
-    #moveqH(qframe)
-    #h.savefig('DelH_Nstate_%i_Qndx_%i.eps' % (nstates, qframe), bbox_inches='tight', dpi=400)
+    qframes=[11, 24]
+    for qframe in qframes:
+        moveqH(qframe)
+        h.savefig('SingleFrameH_n%d_%d.png' % (nstates, qframe), bbox_inches='tight', dpi=600)
     #pdb.set_trace()
 
 
@@ -1049,6 +1078,9 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     Repeat process for S
     """
     #Plot s
+    Sqtitle = s.text(0.85, 0.95, '', fontsize=20)
+    s.text(0.98, .71, r'$\Delta \left(TS\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+    s.text(0.98, .27, r'$\delta\left(\Delta \left(TS\right)\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
     imgSplot = Splot.pcolormesh(sig_range**sig_factor,epsi_range,DelS[(Nparm-1)/2,:,:])
     #Set the colorbar
     divSplot = mal(Splot)
@@ -1062,7 +1094,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #Set the minmax colorscales
     imgdSplot.set_clim(vmin=cdvminS, vmax=cdvmaxS)
     cdSplot = s.colorbar(imgdSplot, cax=caxdSplot)
-    Ssup_title_template = r'$\Delta S$ (top) and $\delta\Delta S$(bottom) with $q=%.2f$ for LJ Spheres' + '\n in units of kcal/mol'
+    Ssup_title_template = r'$T\Delta S$ (top) and $T\delta\Delta S$(bottom) with $q=%.2f$ for LJ Spheres' + '\n in (reduced) units of kcal/mol'
     stitle = s.suptitle('')
     #Set up the empty plots
     #Sscatters = []
@@ -1083,7 +1115,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     noref = noref.compressed()
     scatter_epsis = epsi_samp_space[noref]
     scatter_sig = sig_samp_space[noref]
-    for ax in plotlist:
+    for ax in Splotlist:
         ax.set_yscale(spacename)
         ax.set_xscale(spacename)
         ax.set_ylim([epsiPlotStart,epsiPlotEnd])
@@ -1100,10 +1132,10 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     q_ref = q_samp_space[Ref_state]
     sig_ref = sig_samp_space[Ref_state]
     epsi_ref = epsi_samp_space[Ref_state]
-    def cleanupiS():
+    def cleanupS():
         imgSplot.set_array([])
         imgdSplot.set_array([])
-        imgrdSplot.set_array([])
+        #imgrdSplot.set_array([])
         stitle.set_text('')
         S_scatter_ref.set_data([], [])
         dS_scatter_ref.set_data([], [])
@@ -1111,6 +1143,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         dS_scatter_noref.set_data([], [])
         Sline.set_data([], [])
         dSline.set_data([], [])
+        Sqtitle.set_text('')
         #for iscatter,discatter in zip(Fscatters,dFscatters):
         #    iscatter.set_data([],[])
         #    discatter.set_data([],[])
@@ -1127,12 +1160,13 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         #Lock down the color choice for the error plot
         scrapdSplot = scrapdS.pcolormesh(sig_range**sig_factor,epsi_range,dDelS[qndx,:,:], vmax=cdvmaxS, vmin=cdvminS)
         #Lock down the color choice for the relative error plot
-        scraprdSplot = scraprdS.pcolormesh(sig_range**sig_factor,epsi_range,reldDelS[qndx,:,:],vmax=crdvmaxS, vmin=crdvminS)
+        #scraprdSplot = scraprdS.pcolormesh(sig_range**sig_factor,epsi_range,reldDelS[qndx,:,:],vmax=crdvmaxS, vmin=crdvminS)
         #Reassign the plots, if you did not use an already generated array, you would need to .ravel() on the array you feed to set_array()
         imgSplot.set_array(scrapSplot.get_array())
         imgdSplot.set_array(scrapdSplot.get_array())
-        imgrdSplot.set_array(scraprdSplot.get_array())
-        stitle.set_text(Ssup_title_template % q)
+        #imgrdSplot.set_array(scraprdSplot.get_array())
+        #stitle.set_text(Ssup_title_template % q)
+        Sqtitle.set_text(q_title_template % q)
         Smax = DelS[qndx,:,:].max()
         Smin = DelS[qndx,:,:].min()
         dSmax = dDelS[qndx,:,:].max()
@@ -1160,13 +1194,20 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         else:
             Sline.set_data([], [])
             dSline.set_data([], [])
+        Sline.set_data([], [])
+        dSline.set_data([], [])
+        S_scatter_ref.set_data([], [])
+        dS_scatter_ref.set_data([], [])
+        S_scatter_noref.set_data([], [])
+        dS_scatter_noref.set_data([], [])
         #Cleanup scrap figure to avoid memory buildup
         plt.close(scrapSig)
         if relativeErr:
             return imgFplot, imgdFplot, imgrdFplot, ftitle, F_scatter_noref, dF_scatter_noref, F_scatter_ref, dF_scatter_ref, Fline, dFline
         else:
-            return imgSplot, imgdSplot, ftitle, S_scatter_noref, dS_scatter_noref, S_scatter_ref, dS_scatter_ref, Sline, dSline
-    aniS = ani.FuncAnimation(h, moveqS, range(Nparm), interval=150, blit=False, init_func=cleanupS)
+            #return imgSplot, imgdSplot, stitle, S_scatter_noref, dS_scatter_noref, S_scatter_ref, dS_scatter_ref, Sline, dSline
+            return imgSplot, imgdSplot, Sqtitle, S_scatter_noref, dS_scatter_noref, S_scatter_ref, dS_scatter_ref, Sline, dSline
+    aniS = ani.FuncAnimation(s, moveqS, range(Nparm), interval=150, blit=False, init_func=cleanupS)
     if relativeErr:
         filename='Animated_charging_rel{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
     else:
@@ -1177,6 +1218,10 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #qframe=40
     #moveqS(qframe)
     #s.savefig('DelS_Nstate_%i_Qndx_%i.eps' % (nstates, qframe), bbox_inches='tight', dpi=400)
+    qframes=[11, 24]
+    for qframe in qframes:
+        moveqS(qframe)
+        s.savefig('SingleFrameS_n%d_%d.png' % (nstates, qframe), bbox_inches='tight', dpi=600)
     #pdb.set_trace()
 
 ####################################################################################

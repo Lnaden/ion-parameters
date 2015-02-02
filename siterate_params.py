@@ -55,10 +55,10 @@ def gen_file(filepath, Atype, charge, skel):
     return
 def jobids_from_submit(submit_str):
     #Returns the job id's from the submision script
-    return [re.sub(r'[^\d]*(\d+)',r'\1',line) for line in submit_str.split('\n') if re.match(r'[^\d]*\d+') is not None]
-def jobids(qstat_str):
+    return [re.sub(r'[^\d]*(\d+)',r'\1',line) for line in submit_str.split('\n') if re.match(r'[^\d]*\d+',line) is not None]
+def jobids(squeue_str):
     #Find the job id's from the squeue
-    return [re.sub(r'^ *(\d+).*',r'\1',line) for line in qstat_str.split('\n') if re.match(r'^ *\d+',line) is not None]
+    return [re.sub(r'^ *(\d+).*',r'\1',line) for line in squeue_str.split('\n') if re.match(r'^ *\d+',line) is not None]
     
 def monitor_jobs(jobs, delay=60):
     #Querey the clutser's job id's until all jobs complete

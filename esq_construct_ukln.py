@@ -238,6 +238,23 @@ def subsample_series(series, g_t=None, return_g_t=False):
     else:
         return state_indices, transfer_series
 
+def id_features(data, threshold):
+    '''
+    Find the locations where features exist inside a data array
+    set entries 1=feature, 0=no feature
+    Separating these out into individual features is application dependent
+    Returns an array of ints={0,1} of data.shape
+    '''
+    #Filter data. notouch masks covers the sections we are not examining. touch is the sections we want
+    data_notouch = ma.masked_less(data, threshold)
+    data_touch = ma.masked_greater(data, threshold)
+    #Extract the mask to get where there are features. We will use this to id features to operate on
+    regions = ma.getmask(data_touch) #Extract the mask from the touch array as the Trues will line up with the areas more than the threshold
+    #Create the features map of 1's where we want features (greater than threshold), zeroes otherwise
+    features = numpy.zeros(data.shape, dtype=numpy.int32)
+    features[regions] = 1 #Define features
+    return features
+
 def esq_to_ndx(T, start, end, factor=1, N=51):
     #Quick converter from transformed esq coordinate to effective ndx value
     frac_along = (T**factor - start**factor)/(end**factor-start**factor)
@@ -594,13 +611,24 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             energies.save_consts(constname)
     #Sanity check
     sanity_kln = numpy.zeros(energies.u_kln.shape)
+    #Round q to the the GROMACS precision, otherwise there is drift in q which can cause false positives
+    lamC1r = numpy.around(lamC1, decimals=4)
     for l in xrange(nstates):
-        sanity_kln[:,l,:] = lamC12[l]*energies.const_R_matrix + lamC6[l]*energies.const_A_matrix + lamC1[l]*energies.const_q_matrix + lamC1[l]**2*energies.const_q2_matrix + energies.const_unaffected_matrix
+        #sanity_kln[:,l,:] = lamC12[l]*energies.const_R_matrix + lamC6[l]*energies.const_A_matrix + lamC1[l]*energies.const_q_matrix + lamC1[l]**2*energies.const_q2_matrix + energies.const_unaffected_matrix
+        sanity_kln[:,l,:] = lamC12[l]*energies.const_R_matrix + lamC6[l]*energies.const_A_matrix + lamC1r[l]*energies.const_q_matrix + lamC1r[l]**2*energies.const_q2_matrix + energies.const_unaffected_matrix
     del_kln = numpy.abs(energies.u_kln - sanity_kln)
+    del_tol = 1 #in kJ per mol
     print "Max Delta: %f" % numpy.nanmax(del_kln)
-    rel_del_kln = numpy.abs(del_kln/energies.u_kln)
-    if numpy.nanmax(del_kln) > 2:
-        pdb.set_trace()
+    if numpy.nanmax(del_kln) > 1: #Check for numeric error
+        #Double check to see if the weight is non-zero.
+        #Most common occurance is when small particle is tested in large particle properties
+        #Results in energies > 60,000 kj/mol, which carry 0 weight to machine precision
+        nonzero_weights = numpy.count_nonzero(numpy.exp(-energies.u_kln[numpy.where(del_kln > .2)] * kjpermolTokT))
+        if nonzero_weights != 0:
+            print "and there are %d nonzero weights! Stopping execution" % nonzero_weights
+            pdb.set_trace()
+        else:
+            print "but these carry no weight and so numeric error does not change the answer"
     #pdb.set_trace()
     ##################################################
     ############### END DATA INPUT ###################
@@ -830,14 +858,15 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     db_rand = True
     if id_regions and not os.path.isfile('resamp_points_n%i.npy'%nstates):
         err_threshold = 0.5 #kcal/mol
-        #Filter data. notouch masks covers the sections we are not examining. touch is the sections we want
-        mdDelF_notouch = ma.masked_less(dDelF, err_threshold)
-        mdDelF_touch = ma.masked_greater(dDelF, err_threshold)
-        #Extract the mask to get where there are features. We will use this to id features to operate on
-        regions = ma.getmask(mdDelF_touch) #Extract the mask from the touch array as the Trues will line up with the areas more than the threshold
-        #Create the features map of 1's where we want features (greater than threshold), zeroes otherwise
-        features = numpy.zeros(dDelF.shape, dtype=numpy.int32)
-        features[regions] = 1 #Define features
+        features = id_features(dDelF, err_threshold)
+        ##Filter data. notouch masks covers the sections we are not examining. touch is the sections we want
+        #mdDelF_notouch = ma.masked_less(dDelF, err_threshold)
+        #mdDelF_touch = ma.masked_greater(dDelF, err_threshold)
+        ##Extract the mask to get where there are features. We will use this to id features to operate on
+        #regions = ma.getmask(mdDelF_touch) #Extract the mask from the touch array as the Trues will line up with the areas more than the threshold
+        ##Create the features map of 1's where we want features (greater than threshold), zeroes otherwise
+        #features = numpy.zeros(dDelF.shape, dtype=numpy.int32)
+        #features[regions] = 1 #Define features
         #Define the features of the array by assigning labels
         if idmethod is 'lloyd':
             test_struct = numpy.ones([3,3,3])
@@ -955,38 +984,51 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             #    vertices[0,1] = epsi_samp_space[Ref_state]
             #    vertices[0,2] = sig_samp_space[Ref_state]
             #############################
-            vertices = numpy.zeros([1,3])
-            vertices[0,0] = q_samp_space[Ref_state]
-            vertices[0,1] = epsi_samp_space[Ref_state]
-            vertices[0,2] = sig_samp_space[Ref_state]
-            scanner = dbscan.dbscan(features, dDelF)
-            #Find features
-            #pdb.set_trace()
-            feature_labels, num_features = scanner.generate_neighborhoods()
-            vertex_index = [] #Store which cluster labels to make a vertex out of
-            fsize = numpy.zeros(num_features,dtype=int)
-            #Tabulate Features
-            for i in xrange(num_features):
-                index = i + 1
-                #This excludes the 0 index (background)
-                fsize[i] = numpy.where(feature_labels == index)[0].size
-            #Find features we care about
-            for i in xrange(num_features):
-                if fsize[i]/float(fsize.sum()) >= 0.1: #Feature larger than 10% of all non-background features
-                    vertex_index.append(i+1) #Reaccount for excluding the 0 index
-            if len(vertex_index) == 0: #Check for only a whole bunch of small clusters
-                maxV = 3
-                nV = 0
-                for i in numpy.argsort(fsize)[::-1]: #Sort sizes from max to 
-                    try:
-                        #Add next largest cluster if possible
-                        vertex_index.append(i+1)
-                        nV += 1
-                        if nV >= maxV:
-                            break
-                    except: #Exception for no clusters available, break
-                        #This should only happen when fsize is 0 or something.
-                        break
+            clusters_found = False #Flag to ensure we have clusters.
+            while not clusters_found:
+                vertices = numpy.zeros([1,3])
+                vertices[0,0] = q_samp_space[Ref_state]
+                vertices[0,1] = epsi_samp_space[Ref_state]
+                vertices[0,2] = sig_samp_space[Ref_state]
+                scanner = dbscan.dbscan(features, dDelF)
+                #Find features
+                #pdb.set_trace()
+                feature_labels, num_features = scanner.generate_neighborhoods()
+                vertex_index = [] #Store which cluster labels to make a vertex out of
+                fsize = numpy.zeros(num_features,dtype=int)
+                #Tabulate Features
+                for i in xrange(num_features):
+                    index = i + 1
+                    #This excludes the 0 index (background)
+                    fsize[i] = numpy.where(feature_labels == index)[0].size
+                #Find features we care about
+                for i in xrange(num_features):
+                    if fsize[i]/float(fsize.sum()) >= 0.1: #Feature larger than 10% of all non-background features
+                        vertex_index.append(i+1) #Reaccount for excluding the 0 index
+                if len(vertex_index) == 0: #Check for only a whole bunch of small clusters
+                    maxV = 3
+                    nV = 0
+                    for i in numpy.argsort(fsize)[::-1]: #Sort sizes from max to smallest
+                        try:
+                            #Add next largest cluster if possible
+                            vertex_index.append(i+1)
+                            nV += 1
+                            if nV >= maxV:
+                                clusters_found = True
+                                break
+                        except: #Exception for no clusters available, just pass since no clusters will have been found
+                            #This should only happen when fsize is 0 or something.
+                            pass
+                else:
+                    #Clusters have been found, continue algorithm
+                    clusters_found = True
+                #If no small clusters are found either, lower the error threshold until 1/3 of the grid points are above the threshold
+                if len(vertex_index) == 0:
+                    while float(numpy.where(dDelF > err_threshold)[0].size) / dDelF.size  < 1.0/3:
+                        err_threshold -= 0.001 #Arbitrary reduction, all we really care about is creating regions of uncertainty again
+                    features = id_features(dDelF, err_threshold)
+                    #Write the new error threhold for good measure
+                    numpy.save('err_threshold_n%i.npy' % nstates, numpy.array(err_threshold))
             #Create master vertex system for graph
             Nnew_vertices = len(vertex_index)
             if db_rand:
