@@ -827,8 +827,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     dDelF *= kjpermolTokcal/kjpermolTokT
     DelU *= kjpermolTokcal/kjpermolTokT
     dDelU *= kjpermolTokcal/kjpermolTokT
-    DelS *= kjpermolTokcal/kjpermolTokT
-    dDelS *= kjpermolTokcal/kjpermolTokT
+    DelS *= kjpermolTokcal/kjpermolTokT  / (T/units.kelvin)
+    dDelS *= kjpermolTokcal/kjpermolTokT / (T/units.kelvin)
     #Relative error
     #reldDelF = numpy.abs(dDelF/DelF)
     #pdb.set_trace()
@@ -907,7 +907,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         cdvmaxS = numpy.nanmax(dDelS)*1.01
         cdvmaxS = numpy.nanmean(dDelS) + 0.1*numpy.nanstd(dDelS)
         if nstates == 21:        
-            cdvmaxS = 53.405545268981086 * 1.01
+            cdvmaxS = 53.405545268981086/298 * 1.01
         else:
             cdvmaxS = numpy.nanmax(dDelS)*1.01
         if nstates == 24:
@@ -1079,8 +1079,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     """
     #Plot s
     Sqtitle = s.text(0.85, 0.95, '', fontsize=20)
-    s.text(0.98, .71, r'$\Delta \left(TS\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
-    s.text(0.98, .27, r'$\delta\left(\Delta \left(TS\right)\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+    s.text(0.98, .71, r'$\Delta S$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+    s.text(0.98, .27, r'$\delta\left(\Delta S\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
     imgSplot = Splot.pcolormesh(sig_range**sig_factor,epsi_range,DelS[(Nparm-1)/2,:,:])
     #Set the colorbar
     divSplot = mal(Splot)
@@ -1094,7 +1094,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #Set the minmax colorscales
     imgdSplot.set_clim(vmin=cdvminS, vmax=cdvmaxS)
     cdSplot = s.colorbar(imgdSplot, cax=caxdSplot)
-    Ssup_title_template = r'$T\Delta S$ (top) and $T\delta\Delta S$(bottom) with $q=%.2f$ for LJ Spheres' + '\n in (reduced) units of kcal/mol'
+    Ssup_title_template = r'$\Delta S$ (top) and $\delta\Delta S$(bottom) with $q=%.2f$ for LJ Spheres' + '\n in units of kcal/(K$\cdot$mol)'
     stitle = s.suptitle('')
     #Set up the empty plots
     #Sscatters = []
