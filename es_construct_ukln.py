@@ -504,6 +504,7 @@ if __name__=="__main__":
         print "Free energy of %s relative to LJ6: %.3f +- %.3f kcal/mol with %i states" % (realname[imol], realDeltaF_ij[Ref_state,nstates+imol]*kjpermolTokcal/kjpermolTokT, realdDeltaF_ij[Ref_state,nstates+imol]*kjpermolTokcal/kjpermolTokT, nstates)
     print realepsi
     print realsig
+    pdb.set_trace()
     ###############################################
     ######### END FREE ENERGY CALCULATIONS ########
     ###############################################
