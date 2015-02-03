@@ -27,6 +27,7 @@ kjpermolTokcal = 1/4.184
 graphsfromfile=True #Generate graphs from the .npz arrays
 savedata = True #Save dhdl data
 masked=False
+time_kln=False
 
 #logspace or linspace
 narg = len(sys.argv)
@@ -388,7 +389,7 @@ if __name__=="__main__":
     niterations = len(comp.retained_indices)
     Ref_state = 6 #Reference state of sampling to pull from
     #if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata): #nand gate
-    if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('es_%s/ns%iN%iepsi%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata): #nand gate
+    if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('es_%s/ns%iN%iepsi%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata) or time_kln: #nand gate
         #Create numpy arrys
         DelF = numpy.zeros([Nparm, Nparm])
         dDelF = numpy.zeros([Nparm, Nparm])
@@ -419,13 +420,14 @@ if __name__=="__main__":
                 for isig in xrange(Nparm):
                     sig = sig_range[isig]
                     u_kln_sub[:nstates,isig+nstates+offset,:] = flamC12sqrt(epsi,sig)*const_R_matrix + flamC6sqrt(epsi,sig)*const_A_matrix + const_unaffected_matrix
-                mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
-                (DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-                if savedata:
-                    if not os.path.isdir('es_%s' % spacename):
-                        os.makedirs('es_%s' % spacename) #Create folder
-                    numpy.savez('es_%s/ns%iN%iepsi%i.npz' % (spacename, nstates, Nparm, iepsi), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
-                    #numpy.savez('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, iepsi), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
+                if not time_kln:
+                    mbar = MBAR(u_kln_sub, N_k_sub, initial_f_k=f_k_sub, verbose = False, method = 'adaptive')
+                    (DeltaF_ij, dDeltaF_ij) = mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
+                    if savedata:
+                        if not os.path.isdir('es_%s' % spacename):
+                            os.makedirs('es_%s' % spacename) #Create folder
+                        numpy.savez('es_%s/ns%iN%iepsi%i.npz' % (spacename, nstates, Nparm, iepsi), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
+                        #numpy.savez('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, iepsi), DeltaF_ij=DeltaF_ij, dDeltaF_ij=dDeltaF_ij) #Save file
             else:
                 DeltaF_file = numpy.load('es_%s/ns%iN%iepsi%i.npz' % (spacename, nstates, Nparm, iepsi))
                 #DeltaF_file = numpy.load('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, iepsi))
@@ -447,6 +449,8 @@ if __name__=="__main__":
             estimated_finish_time = final_time + estimated_time_remaining
             print "Iteration took %.3f s." % elapsed_time
             print "Estimated completion in %s, at %s (consuming total wall clock time %s)." % (str(datetime.timedelta(seconds=estimated_time_remaining)), time.ctime(estimated_finish_time), str(datetime.timedelta(seconds=estimated_total_time)))
+        if time_kln:
+            pdb.set_trace()
         numpy.savez('es_freeEnergies%s.npz'%spacename, free_energy=DelF, dfree_energy=dDelF)
     else:
         #if os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata: #Pull data from 
