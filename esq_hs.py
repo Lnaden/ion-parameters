@@ -931,8 +931,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     q_title_template = r"$q=%.2f$"
     #Plot H#
     Hqtitle = h.text(0.85, 0.95, '', fontsize=20)
-    h.text(0.98, .71, r'$\Delta H$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
-    h.text(0.98, .27, r'$\delta\left(\Delta H\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+    h.text(0.98, .71, r'$\Delta \left(\Delta H\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+    h.text(0.98, .27, r'$\delta\left(\Delta \left(\Delta H \right)\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
     imgHplot = Hplot.pcolormesh(sig_range**sig_factor,epsi_range,DelU[(Nparm-1)/2,:,:])
     #Set the colorbar
     divHplot = mal(Hplot)
@@ -1070,7 +1070,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     qframes=[11, 24]
     for qframe in qframes:
         moveqH(qframe)
-        h.savefig('SingleFrameH_n%d_%d.png' % (nstates, qframe), bbox_inches='tight', dpi=600)
+        #h.savefig('SingleFrameH_n%d_%d.png' % (nstates, qframe), bbox_inches='tight', dpi=600)
+        h.savefig('SingleFrameH_n%d_%d.png' % (nstates, qframe), bbox_inches='tight', dpi=300)
     #pdb.set_trace()
 
 
@@ -1079,8 +1080,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     """
     #Plot s
     Sqtitle = s.text(0.85, 0.95, '', fontsize=20)
-    s.text(0.98, .71, r'$\Delta S$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
-    s.text(0.98, .27, r'$\delta\left(\Delta S\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+    s.text(0.98, .71, r'$\Delta\left( \Delta S\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+    s.text(0.98, .27, r'$\delta\left(\Delta \left(\Delta S\right) \right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
     imgSplot = Splot.pcolormesh(sig_range**sig_factor,epsi_range,DelS[(Nparm-1)/2,:,:])
     #Set the colorbar
     divSplot = mal(Splot)
@@ -1221,7 +1222,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     qframes=[11, 24]
     for qframe in qframes:
         moveqS(qframe)
-        s.savefig('SingleFrameS_n%d_%d.png' % (nstates, qframe), bbox_inches='tight', dpi=600)
+        #s.savefig('SingleFrameS_n%d_%d.png' % (nstates, qframe), bbox_inches='tight', dpi=600)
+        s.savefig('SingleFrameS_n%d_%d.png' % (nstates, qframe), bbox_inches='tight', dpi=300)
     #pdb.set_trace()
 
 ####################################################################################

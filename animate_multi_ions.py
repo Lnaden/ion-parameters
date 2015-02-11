@@ -7,7 +7,7 @@ Ref_state = 1
 #Adjust this list to get your image, figure dynamicly updates
 nstates = [21, 31, 41, 51, 61]
 nstates = [21,69]
-nstates = [21]
+nstates = [159]
 
 def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     epsi_min = epsi_samp_space[0]
@@ -148,8 +148,8 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
         #ftitle = f.suptitle('', fontsize = titlefontsize)
         #ftitle = f.suptitle(sup_title_template, fontsize = titlefontsize, horizontalalignment='right')
         #ftitle = f.suptitle(sup_title_template, fontsize = titlefontsize)
-        f.text(0.98, .71, r'$\Delta G$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
-        f.text(0.98, .27, r'$\delta\left(\Delta G\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+        f.text(0.98, .71, r'$\Delta \left(\Delta G\right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
+        f.text(0.98, .27, r'$\delta\left(\Delta \left(\Delta G\right) \right)$', rotation=-90, horizontalalignment='center', verticalalignment='center', fontsize=21)
         q_title_template = r"$q=%.2f$"
         qtitle = f.text(0.85, 0.95, '', fontsize=20)
         for ax in daplots.ravel():
@@ -239,7 +239,8 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     for frame in qframe:
         moveq(frame)
         f.patch.set_alpha(0.0)
-        f.savefig('SingleFrame_n%s_f%d.png' % (statenames, frame), bbox_inches='tight', dpi=600)
+        #f.savefig('SingleFrame_n%s_f%d.png' % (statenames, frame), bbox_inches='tight', dpi=600)
+        f.savefig('SingleFrame_n%s_f%d.png' % (statenames, frame), bbox_inches='tight', dpi=300)
 
 if __name__=="__main__":
     parms = numpy.load('qes.npy')

@@ -32,7 +32,7 @@ graphsfromfile=True #Generate graphs from the .npz arrays
 savedata = True #Save dhdl data
 masked=False
 load_ukln = True
-timekln = False #Timing information
+timekln = True #Timing information
 #subsample_method = 'per-state'
 #subsample_method = 'all'
 subsample_method = 'presubsampled'
@@ -784,6 +784,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             if not timekln and savedata:
                 #Save a copy of just the Nparm**3 matrix in case I dont want to save a large number of files
                 savez('esq_freeEnergies%s.npz'%spacename, free_energy=DelF, dfree_energy=dDelF)
+        if timekln:
+            pdb.set_trace()
     else:
         #if os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata: #Pull data from 
         if os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata: #Pull data from 
