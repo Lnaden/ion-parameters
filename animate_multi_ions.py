@@ -1,8 +1,7 @@
 from esq_construct_ukln import *
 import matplotlib.animation as ani
 
-Ref_state = 1
-
+Ref_state = 1 #Make sure this is the same ref_state as in esq_construct_ukln
 
 #Adjust this list to get your image, figure dynamicly updates
 nstates = [21, 31, 41, 51, 61]
@@ -230,7 +229,7 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     for state in nstates:
         statenames+=str(state) + '_'
     filename = 'Animated_Charge_%s_%s.mp4' % (statenames, errstr)
-    #aniU = ani.FuncAnimation(f, moveq, range(Nparm), interval=150, blit=False, init_func=cleanup)
+    #interval is ms/frame. 200 works well, 150 is just a bit too fast
     aniU = ani.FuncAnimation(f, moveq, range(Nparm), interval=200, blit=False, init_func=cleanup)
     #pdb.set_trace()
     aniU.save(filename, dpi=400)
@@ -239,7 +238,6 @@ def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     for frame in qframe:
         moveq(frame)
         f.patch.set_alpha(0.0)
-        #f.savefig('SingleFrame_n%s_f%d.png' % (statenames, frame), bbox_inches='tight', dpi=600)
         f.savefig('SingleFrame_n%s_f%d.png' % (statenames, frame), bbox_inches='tight', dpi=300)
 
 if __name__=="__main__":

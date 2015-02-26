@@ -1,4 +1,3 @@
-from basisanalyze import *
 import numpy
 from numpy import ma
 from scipy.integrate import simps
@@ -12,7 +11,6 @@ import pdb
 import simtk.unit as units
 from pymbar import MBAR
 from numpy import linalg
-import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable as mal
 import time
 import datetime
@@ -23,57 +21,45 @@ import dbscan
 import scipy.sparse as sparse
 import scipy.sparse.csgraph as csgraph
 
+
+
+#################### OPTIONS ####################
+relativeErr = False #Create the relative error plot
+savedata = True #Save/load dhdl data
+load_ukln = True #Save/load u_kln from file
+timekln = True #Time energy evaluation, skips actual free energy evaluation
+graphsfromfile=True #Generate graphs from the .npz arrays
+
+Ref_state = 1 #Reference state of sampling to pull from
+
+# Set of clustering options
+id_regions = True #Run clustering algorithm?
+idmethod = 'dbscan' #Choose clustering method, 'lloyd' Lloyd's k-means OR 'dbscan' Density Based Clustering (preferd)
+db_rand = True #Boolean. Choose random point inside cluster to sample (True), otherwise use center of mass (False). Only affects 'dbscan' idmethod
+################## END OPTIONS ##################
+
+
+
+
 kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 T = 298 * units.kelvin
 kT = kB*T
 kjpermolTokT = units.kilojoules_per_mole / kT
 kjpermolTokcal = 1/4.184
-graphsfromfile=True #Generate graphs from the .npz arrays
-savedata = True #Save dhdl data
-masked=False
-load_ukln = True
-timekln = True #Timing information
-#subsample_method = 'per-state'
-#subsample_method = 'all'
-subsample_method = 'presubsampled'
 
-#logspace or linspace
-#narg = len(sys.argv)
-#if narg > 1:
-#    if sys.argv[1] == 'log':
-#        spacing=logspace
-#    elif sys.argv[1] == 'lin':
-#        spacing=linspace
-#    else:
-#        spacing=linspace
-#else:
-#    spacing=linspace
 spacing=linspace
 
 
 #Main output controling vars:
 Nparm = 51 #51, 101, or 151
-plotReal = False
 sig_factor=1
-annotatefig = False
 savefigs = False
 if Nparm == 151 or True:
     alle = True
 else:
    alle = False
 
-#Real molecule sampling
-realname = ['UAm', 'NOP', 'C60', 'LJ6', 'null', 'LJ11']
-nreal = len(realname)
-realepsi = numpy.array([1.2301, 3.4941, 1.0372, 0.7600, 0, 0.8])
-realsig  = numpy.array([0.3730, 0.6150, 0.9452, 1.0170, 0, 0.3])
-realq    = numpy.array([     0,      0,      0,      0, 0,   0])
-
-#epsi_max = 0.40188
-#sig_max = 1.31453
-
-
-#Test numpy's savez_compressed formula
+#Test numpy's savez_compressed routine
 try:
     savez = numpy.savez_compressed
 except:
@@ -299,14 +285,6 @@ def cubemean(point, grid):
     c0 = c00*(1-yd) + c10*yd
     c1 = c01*(1-yd) + c11*yd
     c = c0*(1-zd) + c1*zd
-    #for dx in [numpy.ceil, numpy.floor]:
-    #    for dy in [numpy.ceil, numpy.floor]:
-    #        for dz in [numpy.ceil, numpy.floor]:
-    #            gridpt = (dx(px), dy(py), dz(pz))
-    #            grid_points.append(numpy.array(gridpt))
-    #            grid_val.append(grid[gridpt])
-    #netmean = scipy.interpolate.interpn(grid_points, grid_val, point)
-
     return c
 
 
@@ -455,10 +433,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #They should match with LJ 0 and 5, ALWAYS
     q_min = -2.0
     q_max = +2.0
-    #epsi_min = 0.1 #kJ/mol
-    #epsi_max = 0.65
-    #sig_min = 0.25
-    #sig_max = 0.95796625
     epsi_min = epsi_samp_space[0]
     epsi_max = epsi_samp_space[5]
     sig_min = sig_samp_space[0]
@@ -493,12 +467,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
 
 
     #generate sample length
-    #dhdlstart = 34 #Row where data starts
-    #dhdlenergy = 1 #column where energy is
-    #dhdlstates = 4 #Column where dhdl to other states starts, also coulmn for U0
     g_en_start = 19 #Row where data starts in g_energy output
     g_en_energy = 1 #Column where the energy is located
-    #niterations = len(open('lj10/prod/energy10_10.xvg','r').readlines()[g_en_start:])
     niterations_max = 30001
     #Min and max sigmas:
     fC12 = lambda epsi,sig: 4*epsi*sig**12
@@ -523,13 +493,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     subsampled = numpy.zeros([nstates],dtype=numpy.bool)
     if load_ukln and os.path.isfile('esq_ukln_consts_n%i.npz'%nstates):
         energies = consts(nstates, file='esq_ukln_consts_n%i.npz'%nstates)
-        #ukln_consts = numpy.load('esq_ukln_consts_n%i.npz'%nstates)
-        #u_kln = ukln_consts['u_kln']
-        #const_R_matrix = ukln_consts['const_R_matrix'] 
-        #const_A_matrix = ukln_consts['const_A_matrix'] 
-        #const_unaffected_matrix = ukln_consts['const_unaffected_matrix']
-        #const_q_matrix = ukln_consts['const_q_matrix']
-        #const_q2_matrix = ukln_consts['const_q2_matrix']
     else:
         #Initial u_kln
         energies = consts(nstates)
@@ -538,7 +501,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         for k in xrange(nstates):
             print "Importing LJ = %02i" % k
             energy_dic = {'full':{}, 'rep':{}}
-            #Try to load the sub filenames
+            #Try to load the subsampled filenames
             try:
                 energy_dic['null'] = open('lj%s/prod/subenergy%s_null.xvg' %(k,k),'r').readlines()[g_en_start:] #Read in the null energies (unaffected) of the K states
                 for l in xrange(nstates):
@@ -629,25 +592,12 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             pdb.set_trace()
         else:
             print "but these carry no weight and so numeric error does not change the answer"
-    #pdb.set_trace()
     ##################################################
     ############### END DATA INPUT ###################
     ##################################################
-   #Create master uklns
     #Convert to dimless
     energies.dimless()
-    #u_kln = u_kln * kjpermolTokT 
-    #const_R_matrix = const_R_matrix * kjpermolTokT 
-    #const_A_matrix = const_A_matrix * kjpermolTokT 
-    #const_unaffected_matrix = const_unaffected_matrix * kjpermolTokT
-    #const_q_matrix *= kjpermolTokT
-    #const_q2_matrix *= kjpermolTokT
-    includeRef = False
-    if includeRef:
-        offset=1
-    else:
-        offset=0
-    Nallstates = Nparm + nstates + offset #1 to recreate the refstate each time
+    #Set up regular grid
     sig_range = (spacing(sigStartSpace**3,sigEndSpace**3,Nparm))**(1.0/3)
     epsi_range = spacing(epsiStartSpace,epsiEndSpace,Nparm)
     q_range = spacing(qStartSpace,qEndSpace,Nparm)
@@ -655,8 +605,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #Load subsequent f_ki
     f_ki_loaded = False
     state_counter = nstates
-    #pdb.set_trace()
-    #start = time.clock()
     while not f_ki_loaded and state_counter != 0:
         #Load the largest f_ki you can
         try:
@@ -674,62 +622,29 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         #Copy the loaded data
         f_ki = numpy.zeros(nstates)
         f_ki[:draw_ki] = f_ki_load[:draw_ki]
-        #f_ki=numpy.array([0. ,61.20913184 ,71.40827393 ,75.87878531 ,78.40211785 ,79.89587372 ,80.45288761 ,80.28963586 ,79.71483901 ,78.90630752 ,77.90602495 ,0.5571373 ,64.03428624 ,20.01885445 ,-58.8966979 ,-178.11292884 ,-343.48493961 ,-556.63789832 ,70.70837529 ,30.71331917 ,-40.28879673 ,-144.71442394 ,-284.20819285 ,-460.07678445 ,-210.74990763 ,-202.3625391 ,-211.89582577 ,-217.2418002 ,-168.97823733 ,-158.94266495 ,-165.72416028 ,57.79253217 ,-195.03626708 ,-214.19139447 ,-196.65374506 ,-206.69571675 ,-270.11113276 ,-408.83567163 ,-147.95744809 ,-127.26705178 ,-192.96912003 ,-202.04056754 ,-196.08529618 ,-207.33238137 ,-155.20225707 ,-156.03612919 ,-91.06462805 ,3.81078618 ,-279.65874533])
-        #comp = ncdata('complex', '.', u_kln_input=u_kln, nequil=0000, save_equil_data=True, manual_subsample=True, compute_mbar=True, verbose=True, mbar_f_ki=f_ki)
-        comp = ncdata('complex', '.', u_kln_input=energies.u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True, mbar_f_ki=f_ki)
-        #pdb.set_trace()
+        mbar = MBAR(energies.u_kln, energies.N_k, verbose = True, initial_f_k=f_ki, subsampling_protocol=[{'method':'L-BFGS-B','options':{'disp':True}}], subsampling=1)
     except:
-        comp = ncdata('complex', '.', u_kln_input=energies.u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True)
+        mbar = MBAR(energies.u_kln, energies.N_k, verbose = True, subsampling_protocol=[{'method':'L-BFGS-B','options':{'disp':True}}], subsampling=1)
     if not f_ki_loaded or f_ki_n != nstates:
         try:
-            numpy.save_compressed('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), comp.mbar.f_k)
+            numpy.save_compressed('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), mbar.f_k)
         except:
-            numpy.save('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), comp.mbar.f_k)
-    #end = time.clock()
-    #print "Time passed:"
-    #print end - start
-    #sys.exit(0)
-    #(DeltaF_ij, dDeltaF_ij) = comp.mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-    #printFreeEnergy(DeltaF_ij,dDeltaF_ij)
-    #Reun from the subsampled data
-    maxN = comp.N_k.max()
-    #if comp.subsample_method == 'per-state':
-    #    for k in xrange(nstates):
-    #        ndxs = comp.retained_indices[k, :comp.N_k[k]]
-    #        Nndxs = len(ndxs)
-    #        u_kln[k,:,:Nndxs] = u_kln[k,:,ndxs].T
-    #        const_R_matrix[k,:Nndxs] = const_R_matrix[k,ndxs].T
-    #        const_A_matrix[k,:Nndxs] = const_A_matrix[k,ndxs].T
-    #        const_unaffected_matrix[k,:Nndxs] = const_unaffected_matrix[k,ndxs].T
-    #        const_q_matrix[k,:Nndxs] = const_q_matrix[k,ndxs].T
-    #        const_q2_matrix[k,:Nndxs] = const_q2_matrix[k,ndxs].T
-    #else:
-    #    u_kln = u_kln[:,:,comp.retained_indices]
-    #    const_R_matrix = const_R_matrix[:,comp.retained_indices]
-    #    const_A_matrix = const_A_matrix[:,comp.retained_indices]
-    #    const_unaffected_matrix = const_unaffected_matrix[:,comp.retained_indices]
-    #    const_q_matrix = const_q_matrix[:,comp.retained_indices]
-    #    const_q2_matrix = const_q2_matrix[:,comp.retained_indices]
-    #    niterations = len(comp.retained_indices)
-    Ref_state = 1 #Reference state of sampling to pull from
-    #pdb.set_trace()
+            numpy.save('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), mbar.f_k)
+    ######## #Begin computing free energies ##########
+    '''
+    Check a few things before attemping free energy:
+    1) It looks for the Nparm**3 DelF file or the Nparm count of Nparm**2 files (more detailed). Instead of checking for all Nparm detailed files, it looks for the last one since all the others would have to be written first
+    2) If the timekln flag is set, it will run the energy evaluation routine, but not the free energy block to time how long it takes to compute the energies over the Nparm**3 space
+    3) Since spacing can technically be done either in sigma or in sigma**3, it checks for either one.
+    '''
     if not (os.path.isfile('es_freeEnergies%s.npz'%spacename) and graphsfromfile) or not (os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata) or timekln: #nand gate +timing flag
         #Create numpy arrys: q, epsi, sig
         DelF = numpy.zeros([Nparm, Nparm, Nparm])
         dDelF = numpy.zeros([Nparm, Nparm, Nparm])
-        #f_k = comp.mbar.f_k
-        #f_k_sub = numpy.zeros(Nallstates)
-        #f_k_sub[:nstates] = f_k
-        #N_k = comp.mbar.N_k
-        #N_k_sub = numpy.zeros(Nallstates, numpy.int32)
-        #N_k_sub[:nstates] = N_k
         #Populate energies
         run_start_time = time.time()
         number_of_iterations = Nparm
         iteration = 0
-        #for iq in xrange(Nparm):
-        #!!! 0-17, 17-34, 34-Nparm
-        #!!! 0-25, 25-Nparm
         number_of_iterations = Nparm
         for iq in xrange(Nparm):
             #Grab charge
@@ -739,7 +654,9 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             print "Q index: %i/%i" % (iq, Nparm-1)
             #Using PerturpedFreeEnergies instead of recreating the MBAR object every time. Saves time with same accuracy
             #Perturbed assumes all l states are unsampled
-            u_kln_P = numpy.zeros([nstates,Nparm**2 + 1,maxN]) #Account for the reference state
+            #Perturbed free energies can only be computed up to a separate additive constant from the original set, hense, one state from the original set is needed to set the correct constant
+            ## it is convienent to choose the Ref_state for this purpose.
+            u_kln_P = numpy.zeros([nstates,Nparm**2 + 1,energies.itermax]) #Account for the reference state
             #Fill in the reference state
             u_kln_P[:,0,:] = energies.u_kln[:,Ref_state,:]
             #Save data files
@@ -754,7 +671,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                         u_kln_P[:,lndx+1,:] = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
                 if not timekln:
                     #Get free energies relative to the reference state (the index l=0)
-                    (DeltaF_ij, dDeltaF_ij) = comp.mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew-kab')
+                    (DeltaF_ij, dDeltaF_ij) = mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew-kab')
                 if savedata and not timekln:
                     if not os.path.isdir('esq_%s' % spacename):
                         os.makedirs('esq_%s' % spacename) #Create folder
@@ -766,9 +683,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             #printFreeEnergy(DeltaF_ij, dDeltaF_ij)
             if not timekln:
                 for iepsi in xrange(Nparm):
-                    #if includeRef:
-                    #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+offset:]
-                    #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+offset:]
                     #Unwrap the data, reference state is in state 0
                     DelF[iq, iepsi,:] = DeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
                     dDelF[iq, iepsi,:] = dDeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
@@ -782,12 +696,11 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             print "Iteration took %.3f s." % elapsed_time
             print "Estimated completion in %s, at %s (consuming total wall clock time %s)." % (str(datetime.timedelta(seconds=estimated_time_remaining)), time.ctime(estimated_finish_time), str(datetime.timedelta(seconds=estimated_total_time)))
             if not timekln and savedata:
-                #Save a copy of just the Nparm**3 matrix in case I dont want to save a large number of files
+                #Save a copy of just the Nparm**3 matrix in case you dont want to save a large number of files
                 savez('esq_freeEnergies%s.npz'%spacename, free_energy=DelF, dfree_energy=dDelF)
         if timekln:
             pdb.set_trace()
-    else:
-        #if os.path.isfile('es_%s/N%iRef%iOff%iEpsi%i.npz' % (spacename, Nparm, Ref_state, offset, Nparm-1)) and savedata: #Pull data from 
+    else: #Load the files instead
         if os.path.isfile('esq_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata: #Pull data from 
             DelF = numpy.zeros([Nparm, Nparm, Nparm])
             dDelF = numpy.zeros([Nparm, Nparm, Nparm])
@@ -798,9 +711,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 DeltaF_ij = DeltaF_file['DeltaF_ij']
                 dDeltaF_ij = DeltaF_file['dDeltaF_ij']
                 for iepsi in xrange(Nparm):
-                    #if includeRef:
-                    #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+1:]
-                    #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+1:]
                     #Unwrap the datam reference state is in sate 0
                     DelF[iq, iepsi,:] = DeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
                     dDelF[iq, iepsi,:] = dDeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
@@ -809,44 +719,21 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             figdata = numpy.load('esq_freeEnergies%s.npz'%spacename)
             DelF = figdata['free_energy']
             dDelF = figdata['dfree_energy']
-    #pdb.set_trace()
-   ###############################################
+    ###############################################
     ######### END FREE ENERGY CALCULATIONS ########
     ###############################################
-    #Set up a mask
-    if masked:
-        maDelF = ma.masked_where(numpy.fabs(DelF) > 200, DelF)
-        madDelF = ma.masked_where(numpy.fabs(DelF) > 200, dDelF)
-        orgDelF = DelF
-        orgdDelF = dDelF
-        DelF = maDelF
-        dDelF = madDelF
-    #Set up scaling
-    C12_max = 3
-    C12_min = 3E-5
-    C6_max = 3
-    C6_min = 1E-3
-    plotC12_6 = True
-    plotEpsiSig = True
-    if plotC12_6 or plotEpsiSig:
-        C12map = lambda x: ((C12_max - C12_min)*x + C12_min)*kjpermolTokcal
-        C6map = lambda x: ((C6_max - C6_min)*x + C6_min)*kjpermolTokcal
-        ylabel = r'$\epsilon$ in kcal/mol'
-        if sig_factor != 3:
-            xlabel = r'$\sigma$ in nm'
-        else:
-            xlabel = r'$\sigma^{%s}$ in nm$^{%s}$' % (sig_factor, sig_factor)
+    #Set up basic labels for graphs
+    ylabel = r'$\epsilon$ in kcal/mol'
+    if sig_factor != 3:
+        xlabel = r'$\sigma$ in nm'
     else:
-        C12map = lambda x: x
-        C6map = lambda x: x
-        xlabel = r'$\lambda$ of $C12_i$$'
-        ylabel = r'$\lambda$ of $C6_i$$'
+        xlabel = r'$\sigma^{%s}$ in nm$^{%s}$' % (sig_factor, sig_factor)
         
+    #Assign units
     DelF *= kjpermolTokcal/kjpermolTokT
     dDelF *= kjpermolTokcal/kjpermolTokT
-    #Relative error
+    #Relative error, optional third graph
     reldDelF = numpy.abs(dDelF/DelF)
-    #pdb.set_trace()
  
     ################################################
     ################ region ID #####################
@@ -854,23 +741,13 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     '''
     This section will be used to identify where extra sampling should be done. optional flag set at the start of this section
     '''
-    id_regions = True
-    #Set the region id method, lloyd or dbscan
-    idmethod = 'dbscan'
-    db_rand = True
     if id_regions and not os.path.isfile('resamp_points_n%i.npy'%nstates):
         err_threshold = 0.5 #kcal/mol
-        features = id_features(dDelF, err_threshold)
-        ##Filter data. notouch masks covers the sections we are not examining. touch is the sections we want
-        #mdDelF_notouch = ma.masked_less(dDelF, err_threshold)
-        #mdDelF_touch = ma.masked_greater(dDelF, err_threshold)
-        ##Extract the mask to get where there are features. We will use this to id features to operate on
-        #regions = ma.getmask(mdDelF_touch) #Extract the mask from the touch array as the Trues will line up with the areas more than the threshold
-        ##Create the features map of 1's where we want features (greater than threshold), zeroes otherwise
-        #features = numpy.zeros(dDelF.shape, dtype=numpy.int32)
-        #features[regions] = 1 #Define features
         #Define the features of the array by assigning labels
+        features = id_features(dDelF, err_threshold)
         if idmethod is 'lloyd':
+            #The Lloyd method works, although is not as reliable in sampling phase space as dbscan, so dbscan is better developed
+            #Create features based on adjacentcy
             test_struct = numpy.ones([3,3,3])
             feature_labels, num_features = ndimage.measurements.label(features)
             test_feature_labels, test_num_features = ndimage.measurements.label(features, structure=test_struct)
@@ -909,12 +786,12 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             print test_coms_esq
             #Determine size of each feature to figure out which should have more
             resample_tol = 0.15
-            #!!!
+            #Use a reample tolerance of .3 instead, seems to converge faster
             #Convert to broader test structure
             num_features = test_num_features
             feature_labels = test_feature_labels
             resample_tol = 0.30
-            #end!!!
+            #end modification
             Nresample = numpy.zeros(num_features, dtype=numpy.int32)
             Nsize = numpy.zeros(num_features, dtype=numpy.int32)
             for i in range(num_features):
@@ -927,7 +804,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             # Starting with the largest cluster (highest %) then in decending order, alternate celing and floor with deci%
             # The celing/floor will be the # of points distributed to that cluster
             # Points will be distriubed until we run out!
-            ndistrib = 10 # Number of poitns to distribute
+            ndistrib = 10 # Number of points to distribute
             percentSize = Nsize/float(Nsize.sum()) #Generate percentages
             deciPercents = percentSize * 10 #Convert to deciPercent (e.g. 0.34 = 34% = 3.4 deci%)
             sortedNdxMaxMin = numpy.argsort(deciPercents)[::-1] #Figure out which has the max
@@ -973,28 +850,16 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     #resamp_points[resamp_counter,:] = coms_esq[i,:]
                     #resamp_counter += 1
         elif idmethod is 'dbscan':
-            nP_per_path = 3
-            #Try to call up old vertices (neighborhood centers)
-            ###### Disabled for now #####
-            #try:
-            #    #Find the saved vertices file
-            #    vertices = numpy.load('vertices.npy')
-            #except:
-            #    #Fall back to only the reference state
-            #    vertices = numpy.zeros([1,3])
-            #    vertices[0,0] = q_samp_space[Ref_state]
-            #    vertices[0,1] = epsi_samp_space[Ref_state]
-            #    vertices[0,2] = sig_samp_space[Ref_state]
-            #############################
             clusters_found = False #Flag to ensure we have clusters.
             while not clusters_found:
+                #Set the common vertex, the reference state
                 vertices = numpy.zeros([1,3])
                 vertices[0,0] = q_samp_space[Ref_state]
                 vertices[0,1] = epsi_samp_space[Ref_state]
                 vertices[0,2] = sig_samp_space[Ref_state]
+                #Initilize density based scanner
                 scanner = dbscan.dbscan(features, dDelF)
                 #Find features
-                #pdb.set_trace()
                 feature_labels, num_features = scanner.generate_neighborhoods()
                 vertex_index = [] #Store which cluster labels to make a vertex out of
                 fsize = numpy.zeros(num_features,dtype=int)
@@ -1029,9 +894,9 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     while float(numpy.where(dDelF > err_threshold)[0].size) / dDelF.size  < 1.0/3:
                         err_threshold -= 0.001 #Arbitrary reduction, all we really care about is creating regions of uncertainty again
                     features = id_features(dDelF, err_threshold)
-                    #Write the new error threhold for good measure
+                    #Write the new error threhold for documentation
                     numpy.save('err_threshold_n%i.npy' % nstates, numpy.array(err_threshold))
-            #Create master vertex system for graph
+            #Create master vertex system for the graph
             Nnew_vertices = len(vertex_index)
             if db_rand:
                 #Randomly choose a point inside each region
@@ -1042,7 +907,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 for i in range(Nnew_vertices):
                     index = vertex_index[i]
                     shape_slices = shapes[index-1] # The features are in a list with the list index = feature # - 1
-                    pointfound = False
+                    pointfound = False #Ensure the new random point is inside the slices for the cluster
                     while not pointfound:
                         ndx_point = numpy.zeros(3)
                         #Roll random numbers
@@ -1081,9 +946,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                     coms_esq[i,2] = (sigStartSpace**3 + (sigEndSpace**3-sigStartSpace**3)*fraction_along[2])**(1.0/3)
                 vertices = numpy.concatenate((vertices,coms_esq))
                 resamp_points = coms_esq
-            numpy.save('vertices{0:d}.npy'.format(nstates), vertices) #Backups
-            #numpy.save('vertices.npy', vertices)
-            #Generate the complete connectivity network in upper triangle matrix
+            numpy.save('vertices{0:d}.npy'.format(nstates), vertices) #Write the vertices to disk
+            #Generate the complete connectivity network (graph) in upper triangle matrix for sparse processing
             nv = vertices.shape[0]
             lengths = numpy.zeros([nv,nv])
             #Convert to index lengths on vertices before measuring lengths, this is the only places its needed
@@ -1101,9 +965,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             sparse_mst = csgraph.minimum_spanning_tree(lengths)
             #Convert to human-readable format
             mst = sparse_mst.toarray()
-            #pdb.set_trace()
             #Generate the resample points, starting with the new vertices
-            nline = 51
+            nline = 51 #Number of points to uniformly place on each edge
             line_frac = linspace(0,1,nline)
             edgen = 0
             for v in xrange(nv):
@@ -1114,8 +977,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                         edge = numpy.zeros([nline,3])
                         edgendx = numpy.zeros([nline,3])
                         edgedelF = numpy.zeros([nline])
-                        #Line is somewhat directional, 
-                        #but since I only care about "border" where the largest transition occurs
+                        #Edge is somewhat directional, 
+                        #but since we only care about "border" where the largest transition occurs
                         #This problem resolves itself
                         edge[:,0] = vertices[v,0] + (vertices[vj,0] - vertices[v,0])*line_frac
                         edgendx[:,0] = esq_to_ndx(edge[:,0], qStartSpace, qEndSpace)
@@ -1123,12 +986,14 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                         edgendx[:,1] = esq_to_ndx(edge[:,1], epsiStartSpace, epsiEndSpace)
                         edge[:,2] = (vertices[v,2]**3 + (vertices[vj,2]**3 - vertices[v,2]**3)*line_frac)**(1.0/3)
                         edgendx[:,2] = esq_to_ndx(edge[:,2], sigStartSpace, sigEndSpace, factor=3)
-                        #Determine the average "error" of each point based on proximity to the 8 cube points around it
+                        #Determine the average "error" of each point based on cubic interpolation to the 8 cube points around it
                         for point in xrange(nline):
                             edgedelF[point] = cubemean(edgendx[point,:],dDelF)
-                        #Generate a laplace filter to find where the sudden change in edge is
-                        #laplaceline = scipy.ndimage.filters.laplace(edgedelF)
+                        #Generate a sobel filter to find where the sudden change in edge is
                         laplaceline = scipy.ndimage.filters.sobel(edgedelF)
+                        #Alternate (original): use a laplace boundary detection. No real difference between the two methods
+                        #laplaceline = scipy.ndimage.filters.laplace(edgedelF)
+                        ####### Graph the dDelF for each edge, optional debugging block ########
                         #f,(b,a) = plt.subplots(1,2)
                         #a.plot(line_frac, laplaceline)
                         #b.plot(line_frac, edgedelF)
@@ -1137,7 +1002,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                         #f.savefig('sorbel_edge{0:d}'.format(edgen), bbox_inches='tight')
                         #edgen+=1
                         #plt.show()
-                        #pdb.set_trace()
+                        ###### END DEBUG BLOCK #####
                         #Find the point where this change is the largest and add it to the resampled points
                         if db_rand and False: #Disabled for now
                             #Find the point in the edge which has the maximum distance from its closest point
@@ -1156,21 +1021,18 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                         else:
                             boundaryline = int(numpy.nanargmax(numpy.abs(laplaceline)))
                             new_point = edge[boundaryline,:]
-                        #Check to make sure its not in our points already (can happen with MST)
-                        #Added spaces to help readability comprehension
+                        #Check to make sure its not in our points already (sometimes happens with MST)
+                        #Added spaces to help human-readability
                         if not numpy.any([   numpy.allclose(numpy.array([q_samp_space[i],epsi_samp_space[i],sig_samp_space[i]]), new_point)   for i in xrange(nstates)]):
                             #Cast new_point to the correct dims before appending
                             resamp_points = numpy.concatenate((resamp_points, numpy.array([new_point])))
         numpy.savetxt('resamp_points_n%i.txt'%nstates, resamp_points)
         numpy.save('resamp_points_n%i.npy'%nstates, resamp_points)
-        #Test: set the dDelF where there are not features to 0
-        #dDelF[ma.getmask(mdDelF_notouch)] = 0
 
     ################################################
     ################# PLOTTING #####################
     ################################################
     #Plot the sigma and epsilon free energies
-    relativeErr = False
     if relativeErr:
         f,(Fplot,dFplot,rdFplot) = plt.subplots(3,1,sharex=True)
         rdFig = f
@@ -1233,7 +1095,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #print imgdFplot.get_clim()
     #cdvmin, cdvmax = (0.00019094581786378227, 0.45022226894935008) #These are the 11 nstate plots
     #cdvmin, cdvmax = (3.1897634261829015e-05, 0.22292838017499619) 
-    #sys.exit(0)
     imgdFplot.set_clim(vmin=cdvmin, vmax=cdvmax)
     cdFplot = f.colorbar(imgdFplot, cax=caxdFplot)
     ####### Relative Error Plot ########
@@ -1246,89 +1107,13 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     sup_title_template = r'$\Delta G$ (top) and $\delta\Delta G$(bottom) with $q=%.2f$ for LJ Spheres' + '\n in units of kcal/mol'
     ftitle = f.suptitle('')
     #Set up the empty plots
-    #Fscatters = []
-    #dFscatters = []
     Fline, = Fplot.plot([], [], linewidth=2, color='k')
     dFline, = dFplot.plot([], [], linewidth=2, color='w')
-    #F_scatter_noref = Fplot.scatter([], [], s=60, c='k', marker='x')
-    #dF_scatter_noref = dFplot.scatter([], [], s=60, c='w', marker='x')
-    #F_scatter_ref = Fplot.scatter([], [], s=70, c='k', marker='D')
-    #dF_scatter_ref = dFplot.scatter([], [], s=70, c='w', marker='D')
     F_scatter_noref, = Fplot.plot([], [], linestyle='', markersize=5, color='k', marker='x', markeredgewidth=2)
     dF_scatter_noref, = dFplot.plot([], [], linestyle='', markersize=5, color='w', marker='x', markeredgewidth=2)
     F_scatter_ref, = Fplot.plot([], [], linestyle='', markersize=6, color='k', marker='D', markeredgewidth=2)
     dF_scatter_ref, = dFplot.plot([], [], linestyle='', markersize=6, color='w', marker='D', markeredgewidth=2, markeredgecolor='w')
     #Create the scatter sampled data
-    noref = numpy.ma.array(range(nstates), mask=False)
-    noref.mask[Ref_state]=True
-    noref = noref.compressed()
-    scatter_epsis = epsi_samp_space[noref]
-    scatter_sig = sig_samp_space[noref]
-    #for i in xrange(nstates):
-    #    epsi = epsi_samp_space[i]
-    #    sig = sig_samp_space[i]
-    #    if i == Ref_state:
-    #        marker_color = 'k'
-    #        marker_size  = 70
-    #        marker_style = 'D'
-    #    else:
-    #        marker_color = 'k'
-    #        marker_size  = 60
-    #        marker_style = 'x'
-    #    #if lam == 0 and spacing is logspace:
-    #    #    lam = 10**(StartSpace-1)
-    #    Fplot.scatter(sig**sig_factor,epsi, s=marker_size, c=marker_color, marker=marker_style)
-    #    dFplot.scatter(sig**sig_factor,epsi, s=marker_size, c='w', marker=marker_style)
-    if plotReal and Ref_state == 6:
-            Fplot.scatter(realsig**sig_factor, realepsi, s=60, c='k', marker='+')
-            dFplot.scatter(realsig**sig_factor, realepsi, s=60, c='w', marker='+')
-    #plotlam = sampled_lam
-    #if spacing is logspace and plotlam[0] == 0 and not plotC12_6:
-    #    plotlam[0] = 10**(StartSpace-1)
-    #Fplot.plot(sig_range**sig_factor, epsi_plot_range, linewidth=2, color='k')
-    #dFplot.plot(sig_range**sig_factor, epsi_plot_range, linewidth=2, color='w')
-    if annotatefig:
-        if plotReal:
-            xyarrs = zip(anrealsig[:-1]**sig_factor, anrealepsi[:-1])
-            antxt = "Chemically Realistic LJ Spheres"
-            xoffset = 0.9
-            realnamelong = ['UA Methane', 'Neopentane', r'C$_{60}$ Sphere']
-            #Label the actual points
-            bbox_def = dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7)
-            Fplot.annotate(realnamelong[0], #String
-                           (realsig[0], realepsi[0]), xycoords='data', #Point Where are we annotating at
-                           xytext=(4, -18), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
-                           bbox=bbox_def) #style
-            Fplot.annotate(realnamelong[1], #String
-                           (realsig[1], realepsi[1]), xycoords='data', #Point Where are we annotating at
-                           xytext=(-62, -20), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
-                           bbox=bbox_def) #style
-            Fplot.annotate(realnamelong[2], #String
-                           (realsig[2], realepsi[2]), xycoords='data', #Point Where are we annotating at
-                           xytext=(6, 10), textcoords='offset points', #Placement of text either absolute ('data') or relative ('offset points') to the xycoords
-                           bbox=bbox_def) #style
-        else:
-            xyarrs = [(anrealsig[-1]**sig_factor, anrealepsi[-1])]
-            antxt = "Reference State"
-            xoffset = 1
-        my_annotate(Fplot,
-                antxt,
-                xy_arr=xyarrs, xycoords='data',
-                xytext=(sig_range.max()/2*xoffset, epsiEndSpace/2), textcoords='data',
-                bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7),
-                arrowprops=dict(arrowstyle="-|>",
-                                connectionstyle="arc3,rad=0.2",
-                                fc="w", linewidth=2))
-        if nstates == 12:
-            xypt = [(sig_samp_space[-1], epsi_samp_space[-1])]
-            my_annotate(Fplot,
-                        "Extra Sampling",
-                        xy_arr=xypt, xycoords='data',
-                        xytext=(sigPlotStart*1.05, epsiEndSpace/2*1.05), textcoords='data',
-                        bbox=dict(boxstyle='round,pad=0.2', fc='white', alpha=0.7),
-                        arrowprops=dict(arrowstyle="-|>",
-                                        connectionstyle="arc3,rad=0.2",
-                                        fc="w", linewidth=2))
     for ax in plotlist:
         ax.set_yscale(spacename)
         ax.set_xscale(spacename)
@@ -1342,10 +1127,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     else:
         dFplot.set_xlabel(xlabel, fontsize=20)
     #Animate the figures
-    realcMax = -10**20 #Some really small number
-    realcMin = 10**20 #some really large number
-    realdcMax = -10**20 #Some really small number
-    realdcMin = 10**20 #some really large number
     q_ref = q_samp_space[Ref_state]
     sig_ref = sig_samp_space[Ref_state]
     epsi_ref = epsi_samp_space[Ref_state]
@@ -1369,7 +1150,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             return imgFplot, imgdFplot, ftitle, F_scatter_noref, dF_scatter_noref, F_scatter_ref, dF_scatter_ref, Fline, dFline
     def moveq(qndx):
         q = q_range[qndx]
-        #I have to create a secondary pcolormesh set since pcolormesh truncates the array size to make the render faster (I dont think pcolor would but would be slower)
+        #I have to create a secondary pcolormesh set since pcolormesh truncates the array size to make the render faster (I dont think pcolor requires this, would but would be slower)
         #If you don't do this, then it creates a weird set of lines which make no sense
         scrapFig, (scrapF, scrapdF, scraprdF) = plt.subplots(3,1)
         scrapFplot = scrapF.pcolormesh(sig_range**sig_factor,epsi_range,DelF[qndx,:,:])
@@ -1427,19 +1208,13 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #moveq(qframe)
     #f.savefig('DelF_Nstate_%i_Qndx_%i.png' % (nstates, qframe), bbox_inches='tight', dpi=400)
     #if savefigs:
-    #    if plotReal:
-    #        plotrealstr = "T"
-    #    else:
-    #        plotrealstr = "F"
     #    f.patch.set_alpha(0.0)
-    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.png' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight', dpi=600)  
+    #    #f.savefig('LJ_GdG_ns%i_es%i_N%i_em%1.1f.png' % (nstates, sig_factor, Nparm, epsiEndSpace), bbox_inches='tight', dpi=600)  
     #    print "Making the PDF, boss!"
-    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.pdf' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
-    #    #f.savefig('LJ_GdG_ns%i_es%i_real%s_N%i_em%1.1f.eps' % (nstates, sig_factor, plotrealstr, Nparm, epsiEndSpace), bbox_inches='tight')  
+    #    #f.savefig('LJ_GdG_ns%i_es%i_N%i_em%1.1f.pdf' % (nstates, sig_factor, Nparm, epsiEndSpace), bbox_inches='tight')  
+    #    #f.savefig('LJ_GdG_ns%i_es%i_N%i_em%1.1f.eps' % (nstates, sig_factor, Nparm, epsiEndSpace), bbox_inches='tight')  
     #else:
     #    plt.show()
-    #pdb.set_trace()
-    #sys.exit(0) #Terminate here
 ####################################################################################
 ####################################################################################
 ####################################################################################
@@ -1448,40 +1223,7 @@ if __name__ == "__main__":
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("--nstates", dest="nstates", default=None, help="Set the number of states", metavar="NSTATES")
-    #nstate options: 24, 32, 40, 49
     (options, args) = parser.parse_args()
-    #if options.nstates is None:
-    #    nstates = 21
-    #else:
-    #    nstates = options.nstates
-    ##epsi_samp_space = numpy.array([0.100, 6.960, 2.667, 1.596, 1.128, 0.870, 0.706, 0.594, 0.513, 0.451, 0.40188])
-    ##sig_samp_space = numpy.array([0.25000, 0.41677, 0.58856, 0.72049, 0.83175, 0.92978, 1.01843, 1.09995, 1.17584, 1.24712, 1.31453])
-    ##!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ##This is the true sigma sampling space because I made a small math error when initially spacing 
-    ##                                0           1            2            3            4            5            6            7            8            9   10   11
-    #sig_samp_space = numpy.array([0.25, 0.57319535, 0.712053172, 0.811158734, 0.890612296, 0.957966253, 1.016984881, 1.069849165, 1.117949319, 1.162232374, 1.2, 0.3])
-    #epsi_samp_space = numpy.append(epsi_samp_space, 0.8)
-    ##Ions 12-25                                             12          13          14          15          16          17          18          19          20          21          22          23          24          25
-    #sig_samp_space  = numpy.append(sig_samp_space, [0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535, 0.57319535])
-    #epsi_samp_space = numpy.append(epsi_samp_space,[      0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21,       0.21])
-    ##Ions 26-35                                             26          27          28          29          30          31          32          33          34          35
-    #sig_samp_space  = numpy.append(sig_samp_space, [0.89830417, 0.89119881, 0.92340246, 0.89588727, 1.11223185, 1.11840500, 1.11239744, 1.10950395, 1.11391239, 0.87474864])
-    #epsi_samp_space = numpy.append(epsi_samp_space,[1.09793856, 3.02251958, 0.76784386, 1.91285202, 0.89731119, 0.64068812, 2.98142758, 2.66769708, 1.81440736, 2.76843218])
-    ##Ions 36-45                                             36           37           38           39           40           41           42           43           44           45          
-    #sig_samp_space  = numpy.append(sig_samp_space, [1.10602708, 0.867445388, 0.807577825, 0.881299638, 1.117410858, 1.113348358, 0.912443052, 0.804213494, 1.108191619, 1.105962702])
-    #epsi_samp_space = numpy.append(epsi_samp_space,[0.982771643, 2.997387823, 0.966241439, 1.852925855, 0.65263393, 1.818471648, 0.703674209, 2.706448907, 2.982717551, 2.71202082])
-    #
-    #
-    #sig3_samp_space = sig_samp_space**3
-    #
-    ##                                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,      12,      13,      14,      15,      16,      17,      18,      19,      20,      21,      22,      23,      24,      25 
-    #q_samp_space    = numpy.array([  0, 0, 0, 0, 0, 0, 0, 0, 0, 0,  0,  0, -2.0000, -1.8516, -1.6903, -1.5119, -1.3093, -1.0690, -0.7559, +2.0000, +1.8516, +1.6903, +1.5119, +1.3093, +1.0690, +0.7559])
-    ##Ions 26-35                                     26      27      28      29       30      31      32       33      34       35
-    #q_samp_space = numpy.append(q_samp_space, [-1.1094, 1.1827, 1.1062, 1.1628, -1.2520, 1.2705, 1.2610, -1.2475, 1.2654, -1.1594])
-    ##Ions 36-45                                     36      37       38      39      40      41      42       43      44       45          
-    #q_samp_space = numpy.append(q_samp_space, [-0.6057, 1.3179, -0.4568, 1.3153, 1.3060, 1.2911, 1.3106, -0.5160, 1.2880, -0.6149])
-    #execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space)
-    ##!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     x = numpy.load('qes.npy')
     qs = x[:,0]
     es = x[:,1]
@@ -1490,5 +1232,6 @@ if __name__ == "__main__":
         nstates = len(qs)
     else:
         nstates = int(options.nstates)
+    #If this script is run with manaual execution, break here since its probably being run as debugging anyways.
     pdb.set_trace()
     execute(nstates, qs, es, ss)

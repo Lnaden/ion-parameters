@@ -104,4 +104,4 @@ class clusterset(object):
             self.points = numpy.concatenate((self.points, points))
 
 if __name__=="__main__":
-    print "Syntax Good, boss" 
+    print "Syntax seems okay" 
