@@ -67,23 +67,6 @@ except:
 
 
 ################ SUBROUTINES ##################
-def my_annotate(ax, s, xy_arr=[], *args, **kwargs):
-  ans = []
-  an = ax.annotate(s, xy_arr[0], *args, **kwargs)
-  ans.append(an)
-  d = {}
-  try:
-    d['xycoords'] = kwargs['xycoords']
-  except KeyError:
-    pass
-  try:
-    d['arrowprops'] = kwargs['arrowprops']
-  except KeyError:
-    pass
-  for xy in xy_arr[1:]:
-    an = ax.annotate(s, xy, alpha=0.0, xytext=(0,0), textcoords=an, **d)
-    ans.append(an)
-  return ans
 
 ############### Lloyd's Algorithm for voronoi tesalation ############
 '''
@@ -425,7 +408,6 @@ class consts(object): #Class to house all constant information
         self.shape = self.u_kln.shape
         self.units = True
 
-#if __name__=="__main__":
 def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #Initilize limts
     sig3_samp_space = sig_samp_space**3

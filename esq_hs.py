@@ -1,4 +1,3 @@
-from basisanalyze import *
 import numpy
 from numpy import ma
 from scipy.integrate import simps
@@ -12,7 +11,6 @@ import pdb
 import simtk.unit as units
 from pymbar import MBAR
 from numpy import linalg
-import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable as mal
 import time
 import datetime
@@ -27,31 +25,23 @@ import scipy.sparse.csgraph as csgraph
 Special module to constuct H and S from set data
 """
 
+
+#################### OPTIONS ####################
+savedata = True #Save/load dhdl data
+load_ukln = True #Save/load u_kln from file
+timekln = True #Time energy evaluation, skips actual free energy evaluation
+graphsfromfile=True #Generate graphs from the .npz arrays
+
+Ref_state = 1 #Reference state of sampling to pull from
+################## END OPTIONS ##################
+
+
 kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 T = 298 * units.kelvin
 kT = kB*T
 kjpermolTokT = units.kilojoules_per_mole / kT
 kjpermolTokcal = 1/4.184
-graphsfromfile=True #Generate graphs from the .npz arrays
-savedata = True #Save dhdl data
 masked=False
-load_ukln = True
-timekln = False #Timing information
-#subsample_method = 'per-state'
-#subsample_method = 'all'
-subsample_method = 'presubsampled'
-
-#logspace or linspace
-#narg = len(sys.argv)
-#if narg > 1:
-#    if sys.argv[1] == 'log':
-#        spacing=logspace
-#    elif sys.argv[1] == 'lin':
-#        spacing=linspace
-#    else:
-#        spacing=linspace
-#else:
-#    spacing=linspace
 spacing=linspace
 
 
@@ -59,23 +49,11 @@ spacing=linspace
 Nparm = 51 #51, 101, or 151
 plotReal = False
 sig_factor=1
-annotatefig = False
 savefigs = False
 if Nparm == 151 or True:
     alle = True
 else:
    alle = False
-
-#Real molecule sampling
-realname = ['UAm', 'NOP', 'C60', 'LJ6', 'null', 'LJ11']
-nreal = len(realname)
-realepsi = numpy.array([1.2301, 3.4941, 1.0372, 0.7600, 0, 0.8])
-realsig  = numpy.array([0.3730, 0.6150, 0.9452, 1.0170, 0, 0.3])
-realq    = numpy.array([     0,      0,      0,      0, 0,   0])
-
-#epsi_max = 0.40188
-#sig_max = 1.31453
-
 
 #Test numpy's savez_compressed formula
 try:
@@ -85,105 +63,6 @@ except:
 
 
 ################ SUBROUTINES ##################
-def my_annotate(ax, s, xy_arr=[], *args, **kwargs):
-  ans = []
-  an = ax.annotate(s, xy_arr[0], *args, **kwargs)
-  ans.append(an)
-  d = {}
-  try:
-    d['xycoords'] = kwargs['xycoords']
-  except KeyError:
-    pass
-  try:
-    d['arrowprops'] = kwargs['arrowprops']
-  except KeyError:
-    pass
-  for xy in xy_arr[1:]:
-    an = ax.annotate(s, xy, alpha=0.0, xytext=(0,0), textcoords=an, **d)
-    ans.append(an)
-  return ans
-
-############### Lloyd's Algorithm for voronoi tesalation ############
-'''
-This block is designed to help me id where the center of a volume of a given feature is
-Based on datasicnelab.wordpress.com/2013/12/12/clustering-with-k-means-in-python
-'''
-import random
-def cluster_points(X,mu):
-    clusters={}
-    for x in X:
-        bestmukey = min([(i[0], numpy.linalg.norm(x-mu[i[0]])) for i in enumerate(mu)], key=lambda t:t[1])[0]
-        try:
-            clusters[bestmukey].append(x)
-        except KeyError:
-            clusters[bestmukey]=[x]
-    for key in clusters.keys(): #Convert to single array, not a set of arrays
-        clusters[key] = numpy.array(clusters[key])
-    return clusters
-def reevaluate_centers(clusters, weights):
-    newmu=[]
-    keys= sorted(clusters.keys())
-    for k in keys:
-        #Convert a set of clusters to their tuple form to feed into the weights
-        weight_map = tuple(clusters[k][:,i] for i in range(clusters[k].shape[1])) #shape[1] is the N dim
-        #Identify where this cluster is
-        tempfeatures = numpy.zeros(weights.shape)
-        tempfeatures[weight_map] = 1
-        #Find the center of mass based on the weights
-        com = numpy.array(ndimage.measurements.center_of_mass(weights, labels=tempfeatures, index=1))
-        #Attach these weights to the new mu
-        newmu.append(com)
-        #newmu.append(numpy.mean(clusters[k],axis=0))
-    return newmu
-def has_converged(mu,oldmu):
-    try:
-        converged = (set([tuple(a) for a in mu]) == set([tuple(a) for a in oldmu]))
-    except:
-        converged = (set([a for a in mu]) == set([a for a in oldmu]))
-    return converged
-def find_centers(X, K, weights, verbose=False):
-    #Initilize to K random centers
-    oldmu =  random.sample(X,K)
-    mu = random.sample(X,K)
-    #oldmu = [weights[tuple(j for j in i)] for i in oldcord] #Create the list of weights by pulling each "center" and then making the tuple index of the single entry before passing it to weights
-    #mu = [weights[tuple(j for j in i)] for i in mucord]
-    iteration = 1
-    while not has_converged(mu,oldmu):
-        if verbose:
-            sys.stdout.flush()
-            sys.stdout.write('\rIteration: %i' % iteration)
-        oldmu=mu
-        #assign all points in X to clusters
-        clusters = cluster_points(X,mu)
-        #Re-evaluate centers
-        mu = reevaluate_centers(clusters, weights)
-        iteration += 1
-    if verbose: sys.stdout.write('\n')
-    return mu, clusters
-def closest_index(point, features, index):
-    #Find the closest point in features at index that is near point.
-    #Point should have dimensions to describe a point in features
-    #Create array of feature indices
-    feature_loc = numpy.where(features == index)
-    NFPoints = len(feature_loc[0])
-    Ndim = point.shape[0]
-    indices = numpy.zeros([Ndim, NFPoints])
-    delta = numpy.zeros(indices.shape)
-    for dim in range(Ndim):
-        indices[dim,:] = feature_loc[dim] #Should grab the array
-        delta[dim,:] = feature_loc[dim] - point[dim] #Assign the delta operator
-    distance = numpy.sqrt(numpy.sum(delta**2,axis = 0))
-    minloc = numpy.where(distance == distance.min())
-    return indices[:,minloc]
-def closest_point_with_index(point, features):
-    #Accepts a point of float "index" and finds the nearest integer index, returns the 
-    dims = features.shape
-    ndims = len(dims)
-    #Round the point
-    rpoint = numpy.around(point, out=numpy.zeros(ndims,dtype=int))
-    #Since the point should alway be on the interior, i should not have to worry about rounding
-    return rpoint, features[tuple(numpy.array(x) for x in rpoint)] #Cast the array to the correct index scheme to return single number not 3 slices of 2-dimensions
-
 def printFreeEnergy(DeltaF_ij, dDeltaF_ij):
     nstates = DeltaF_ij.shape[0]
     print "%s DeltaF_ij:" % "complex"
@@ -434,7 +313,6 @@ class consts(object): #Class to house all constant information
         self.shape = self.u_kln.shape
         self.units = True
 
-#if __name__=="__main__":
 def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #Initilize limts
     sig3_samp_space = sig_samp_space**3
@@ -442,10 +320,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #They should match with LJ 0 and 5, ALWAYS
     q_min = -2.0
     q_max = +2.0
-    #epsi_min = 0.1 #kJ/mol
-    #epsi_max = 0.65
-    #sig_min = 0.25
-    #sig_max = 0.95796625
     epsi_min = epsi_samp_space[0]
     epsi_max = epsi_samp_space[5]
     sig_min = sig_samp_space[0]
@@ -480,9 +354,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
 
 
     #generate sample length
-    #dhdlstart = 34 #Row where data starts
-    #dhdlenergy = 1 #column where energy is
-    #dhdlstates = 4 #Column where dhdl to other states starts, also coulmn for U0
     g_en_start = 19 #Row where data starts in g_energy output
     g_en_energy = 1 #Column where the energy is located
     #niterations = len(open('lj10/prod/energy10_10.xvg','r').readlines()[g_en_start:])
@@ -598,32 +469,30 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             energies.save_consts(constname)
     #Sanity check
     sanity_kln = numpy.zeros(energies.u_kln.shape)
+    #Round q to the the GROMACS precision, otherwise there is drift in q which can cause false positives
+    lamC1r = numpy.around(lamC1, decimals=4)
     for l in xrange(nstates):
-        sanity_kln[:,l,:] = lamC12[l]*energies.const_R_matrix + lamC6[l]*energies.const_A_matrix + lamC1[l]*energies.const_q_matrix + lamC1[l]**2*energies.const_q2_matrix + energies.const_unaffected_matrix
+        #sanity_kln[:,l,:] = lamC12[l]*energies.const_R_matrix + lamC6[l]*energies.const_A_matrix + lamC1[l]*energies.const_q_matrix + lamC1[l]**2*energies.const_q2_matrix + energies.const_unaffected_matrix
+        sanity_kln[:,l,:] = lamC12[l]*energies.const_R_matrix + lamC6[l]*energies.const_A_matrix + lamC1r[l]*energies.const_q_matrix + lamC1r[l]**2*energies.const_q2_matrix + energies.const_unaffected_matrix
     del_kln = numpy.abs(energies.u_kln - sanity_kln)
+    del_tol = 1 #in kJ per mol
     print "Max Delta: %f" % numpy.nanmax(del_kln)
-    rel_del_kln = numpy.abs(del_kln/energies.u_kln)
-    if numpy.nanmax(del_kln) > 2:
-        pdb.set_trace()
-    #pdb.set_trace()
+    if numpy.nanmax(del_kln) > 1: #Check for numeric error
+        #Double check to see if the weight is non-zero.
+        #Most common occurance is when small particle is tested in large particle properties
+        #Results in energies > 60,000 kj/mol, which carry 0 weight to machine precision
+        nonzero_weights = numpy.count_nonzero(numpy.exp(-energies.u_kln[numpy.where(del_kln > .2)] * kjpermolTokT))
+        if nonzero_weights != 0:
+            print "and there are %d nonzero weights! Stopping execution" % nonzero_weights
+            pdb.set_trace()
+        else:
+            print "but these carry no weight and so numeric error does not change the answer"
     ##################################################
     ############### END DATA INPUT ###################
     ##################################################
-   #Create master uklns
     #Convert to dimless
     energies.dimless()
-    #u_kln = u_kln * kjpermolTokT 
-    #const_R_matrix = const_R_matrix * kjpermolTokT 
-    #const_A_matrix = const_A_matrix * kjpermolTokT 
-    #const_unaffected_matrix = const_unaffected_matrix * kjpermolTokT
-    #const_q_matrix *= kjpermolTokT
-    #const_q2_matrix *= kjpermolTokT
-    includeRef = False
-    if includeRef:
-        offset=1
-    else:
-        offset=0
-    Nallstates = Nparm + nstates + offset #1 to recreate the refstate each time
+    #Set up regular grid
     sig_range = (spacing(sigStartSpace**3,sigEndSpace**3,Nparm))**(1.0/3)
     epsi_range = spacing(epsiStartSpace,epsiEndSpace,Nparm)
     q_range = spacing(qStartSpace,qEndSpace,Nparm)
@@ -631,8 +500,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #Load subsequent f_ki
     f_ki_loaded = False
     state_counter = nstates
-    #pdb.set_trace()
-    #start = time.clock()
     while not f_ki_loaded and state_counter != 0:
         #Load the largest f_ki you can
         try:
@@ -650,45 +517,16 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         #Copy the loaded data
         f_ki = numpy.zeros(nstates)
         f_ki[:draw_ki] = f_ki_load[:draw_ki]
-        #f_ki=numpy.array([0. ,61.20913184 ,71.40827393 ,75.87878531 ,78.40211785 ,79.89587372 ,80.45288761 ,80.28963586 ,79.71483901 ,78.90630752 ,77.90602495 ,0.5571373 ,64.03428624 ,20.01885445 ,-58.8966979 ,-178.11292884 ,-343.48493961 ,-556.63789832 ,70.70837529 ,30.71331917 ,-40.28879673 ,-144.71442394 ,-284.20819285 ,-460.07678445 ,-210.74990763 ,-202.3625391 ,-211.89582577 ,-217.2418002 ,-168.97823733 ,-158.94266495 ,-165.72416028 ,57.79253217 ,-195.03626708 ,-214.19139447 ,-196.65374506 ,-206.69571675 ,-270.11113276 ,-408.83567163 ,-147.95744809 ,-127.26705178 ,-192.96912003 ,-202.04056754 ,-196.08529618 ,-207.33238137 ,-155.20225707 ,-156.03612919 ,-91.06462805 ,3.81078618 ,-279.65874533])
-        #comp = ncdata('complex', '.', u_kln_input=u_kln, nequil=0000, save_equil_data=True, manual_subsample=True, compute_mbar=True, verbose=True, mbar_f_ki=f_ki)
-        comp = ncdata('complex', '.', u_kln_input=energies.u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True, mbar_f_ki=f_ki)
-        #pdb.set_trace()
+        mbar = MBAR(energies.u_kln, energies.N_k, verbose = True, initial_f_k=f_ki, subsampling_protocol=[{'method':'L-BFGS-B','options':{'disp':True}}], subsampling=1)
     except:
-        comp = ncdata('complex', '.', u_kln_input=energies.u_kln, nequil=0000, save_equil_data=True, subsample_method=subsample_method, compute_mbar=True, verbose=True)
+        mbar = MBAR(energies.u_kln, energies.N_k, verbose = True, subsampling_protocol=[{'method':'L-BFGS-B','options':{'disp':True}}], subsampling=1)
     if not f_ki_loaded or f_ki_n != nstates:
         try:
-            numpy.save_compressed('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), comp.mbar.f_k)
+            numpy.save_compressed('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), mbar.f_k)
         except:
-            numpy.save('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), comp.mbar.f_k)
-    #end = time.clock()
-    #print "Time passed:"
-    #print end - start
-    #sys.exit(0)
-    #(DeltaF_ij, dDeltaF_ij) = comp.mbar.getFreeEnergyDifferences(uncertainty_method='svd-ew')
-    #printFreeEnergy(DeltaF_ij,dDeltaF_ij)
-    #Reun from the subsampled data
-    maxN = comp.N_k.max()
-    #if comp.subsample_method == 'per-state':
-    #    for k in xrange(nstates):
-    #        ndxs = comp.retained_indices[k, :comp.N_k[k]]
-    #        Nndxs = len(ndxs)
-    #        u_kln[k,:,:Nndxs] = u_kln[k,:,ndxs].T
-    #        const_R_matrix[k,:Nndxs] = const_R_matrix[k,ndxs].T
-    #        const_A_matrix[k,:Nndxs] = const_A_matrix[k,ndxs].T
-    #        const_unaffected_matrix[k,:Nndxs] = const_unaffected_matrix[k,ndxs].T
-    #        const_q_matrix[k,:Nndxs] = const_q_matrix[k,ndxs].T
-    #        const_q2_matrix[k,:Nndxs] = const_q2_matrix[k,ndxs].T
-    #else:
-    #    u_kln = u_kln[:,:,comp.retained_indices]
-    #    const_R_matrix = const_R_matrix[:,comp.retained_indices]
-    #    const_A_matrix = const_A_matrix[:,comp.retained_indices]
-    #    const_unaffected_matrix = const_unaffected_matrix[:,comp.retained_indices]
-    #    const_q_matrix = const_q_matrix[:,comp.retained_indices]
-    #    const_q2_matrix = const_q2_matrix[:,comp.retained_indices]
-    #    niterations = len(comp.retained_indices)
-    Ref_state = 1 #Reference state of sampling to pull from
-    #pdb.set_trace()
+            numpy.save('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), mbar.f_k)
+
+    ######## #Begin computing free energies ##########
     if not (graphsfromfile) or not (os.path.isfile('hs_%s/ns%iNp%iQ%i.npz' % (spacename, nstates, Nparm, Nparm-1)) and savedata) or timekln: #nand gate +timing flag
         #Create numpy arrys: q, epsi, sig
         DelF = numpy.zeros([Nparm, Nparm, Nparm])
@@ -713,7 +551,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             print "Q index: %i/%i" % (iq, Nparm-1)
             #Using PerturpedFreeEnergies instead of recreating the MBAR object every time. Saves time with same accuracy
             #Perturbed assumes all l states are unsampled
-            u_kln_P = numpy.zeros([nstates,Nparm**2 + 1,maxN]) 
+            u_kln_P = numpy.zeros([nstates,Nparm**2 + 1,energies.itermax]) 
             #Fill in ref state
             u_kln_P[:,0,:] = energies.u_kln[:,Ref_state,:]
             #Save data files
@@ -721,19 +559,12 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 for iepsi in xrange(Nparm):
                     epsi = epsi_range[iepsi]
                     #Create Sub matrix
-                    #u_kln_sub = numpy.zeros([Nallstates,Nallstates,niterations])
-                    #u_kln_sub[:nstates,:nstates,:] = u_kln
-                    #DEBUG: Rebuild the reference state
-                    #if includeRef:
-                    #    Repsi = epsi_samp_space[Ref_state]
-                    #    Rsig = sig_samp_space[Ref_state]
-                    #    u_kln_sub[:nstates,nstates,:] = flamC12sqrt(Repsi,Rsig)*const_R_matrix + flamC6sqrt(Repsi,Rsig)*const_A_matrix + const_unaffected_matrix
                     for isig in xrange(Nparm):
                         sig = sig_range[isig]
                         lndx = isig + (iepsi*Nparm)
                         u_kln_P[:,lndx+1,:] = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
                 if not timekln:
-                    (DeltaF_ij, dDeltaF_ij, DeltaU_ij, dDeltaU_ij, DeltaS_ij, dDeltaS_ij) = comp.mbar.computePerturbedEntropyAndEnthalpy(u_kln_P, uncertainty_method='svd-ew-kab', testM='new')
+                    (DeltaF_ij, dDeltaF_ij, DeltaU_ij, dDeltaU_ij, DeltaS_ij, dDeltaS_ij) = mbar.computePerturbedEntropyAndEnthalpy(u_kln_P, uncertainty_method='svd-ew-kab', testM='new')
                 if savedata and not timekln:
                     if not os.path.isdir('hs_%s' % spacename):
                         os.makedirs('hs_%s' % spacename) #Create folder
@@ -749,9 +580,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             #printFreeEnergy(DeltaF_ij, dDeltaF_ij)
             if not timekln:
                 for iepsi in xrange(Nparm):
-                    #if includeRef:
-                    #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+offset:]
-                    #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+offset:]
                     #Unwrap the data
                     DelF[iq, iepsi,:] = DeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
                     dDelF[iq, iepsi,:] = dDeltaF_ij[0, 1 + iepsi*Nparm:1+ (iepsi+1)*Nparm]
@@ -788,9 +616,6 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                 DeltaS_ij = DeltaF_file['DeltaS_ij']
                 dDeltaS_ij = DeltaF_file['dDeltaS_ij']
                 for iepsi in xrange(Nparm):
-                    #if includeRef:
-                    #    DelF[iq, iepsi,:] = DeltaF_ij[nstates,nstates+1:]
-                    #    dDelF[iq, iepsi,:] = dDeltaF_ij[nstates,nstates+1:]
                     #Unwrap the data
                     DelF[iq, iepsi,:] = DeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
                     dDelF[iq, iepsi,:] = dDeltaF_ij[0, 1 + iepsi*Nparm:1 + (iepsi+1)*Nparm]
@@ -802,26 +627,12 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     ###############################################
     ######### END FREE ENERGY CALCULATIONS ########
     ###############################################
-    #Set up scaling
-    C12_max = 3
-    C12_min = 3E-5
-    C6_max = 3
-    C6_min = 1E-3
-    plotC12_6 = True
-    plotEpsiSig = True
-    if plotC12_6 or plotEpsiSig:
-        C12map = lambda x: ((C12_max - C12_min)*x + C12_min)*kjpermolTokcal
-        C6map = lambda x: ((C6_max - C6_min)*x + C6_min)*kjpermolTokcal
-        ylabel = r'$\epsilon$ in kcal/mol'
-        if sig_factor != 3:
-            xlabel = r'$\sigma$ in nm'
-        else:
-            xlabel = r'$\sigma^{%s}$ in nm$^{%s}$' % (sig_factor, sig_factor)
+    ylabel = r'$\epsilon$ in kcal/mol'
+    if sig_factor != 3:
+        xlabel = r'$\sigma$ in nm'
     else:
-        C12map = lambda x: x
-        C6map = lambda x: x
-        xlabel = r'$\lambda$ of $C12_i$$'
-        ylabel = r'$\lambda$ of $C6_i$$'
+        xlabel = r'$\sigma^{%s}$ in nm$^{%s}$' % (sig_factor, sig_factor)
+
         
     DelF *= kjpermolTokcal/kjpermolTokT
     dDelF *= kjpermolTokcal/kjpermolTokT
@@ -830,15 +641,15 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     DelS *= kjpermolTokcal/kjpermolTokT  / (T/units.kelvin)
     dDelS *= kjpermolTokcal/kjpermolTokT / (T/units.kelvin)
     #Relative error
-    #reldDelF = numpy.abs(dDelF/DelF)
-    #pdb.set_trace()
+    relativeErr = False
+    if relativeErr:
+        reldDelF = numpy.abs(dDelF/DelF)
  
 
     ################################################
     ################# PLOTTING #####################
     ################################################
     #Plot the sigma and epsilon free energies
-    relativeErr = False
     if relativeErr:
         f,(Fplot,dFplot,rdFplot) = plt.subplots(3,1,sharex=True)
         rdFig = f
