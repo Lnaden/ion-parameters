@@ -142,7 +142,7 @@ def iterate(continuation=True, start=None):
     if start is None or start == 'kln':
         print "Rerunning"
         #4) Old States: Run the kln through the new states
-        basekln = '\"cd /home/ln8dc/ljspherespace; sh /home/ln8dc/ljspherespace/submit_optrerun_esq.sh FLAGS\"'
+        basekln = '\"cd /home/ln8dc/ljspherespace; sh /home/ln8dc/ljspherespace/ssubmit_optrerun_esq.sh FLAGS\"'
         flagstr = '-lk {lk:d} -uk {uk:d} -ll {ll:d} -ul {ul:d} {tpr:s} {submit:s} {kln:s} {null:s} {qq2:s} {rep:s}'
         if not continuation:
             oldflags = {'lk':0, 'uk':nlj-1, 'll':old_nlj, 'ul':nlj-1, 'tpr':'--tpr', 'submit':'--submit', 'kln':'--kln', 'null':'--null', 'qq2':'--qq2', 'rep':'--rep'}
@@ -261,10 +261,9 @@ def iterate(continuation=True, start=None):
 
 if __name__ == "__main__":
     continuation = True
-    iterations = 3
+    iterations = 1
     #startfrom = None
-    #startfrom = 'free energy'
-    startfrom = 'equilibrate'
+    startfrom = 'free energy'
     for i in xrange(iterations):
         iterate(continuation=continuation, start=startfrom)
         continuation = True #REQUIRED, ensures init parms are never processed more than once

@@ -27,7 +27,7 @@ import scipy.sparse.csgraph as csgraph
 relativeErr = False #Create the relative error plot
 savedata = True #Save/load dhdl data
 load_ukln = True #Save/load u_kln from file
-timekln = True #Time energy evaluation, skips actual free energy evaluation
+timekln = False #Time energy evaluation, skips actual free energy evaluation
 graphsfromfile=True #Generate graphs from the .npz arrays
 
 Ref_state = 1 #Reference state of sampling to pull from
@@ -269,6 +269,9 @@ def cubemean(point, grid):
     c1 = c01*(1-yd) + c11*yd
     c = c0*(1-zd) + c1*zd
     return c
+
+def bornG(q, sig, e0, dielec):
+    return (q**2 / (4*sig*e0*numpy.pi)) * (1.0/dielec - 1)
 
 
 class consts(object): #Class to house all constant information
@@ -612,6 +615,40 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             numpy.save_compressed('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), mbar.f_k)
         except:
             numpy.save('esq_f_k_{myint:{width}}.npy'.format(myint=nstates, width=len(str(nstates))), mbar.f_k)
+    ################################################################
+    ######## Optional block: specific free energy estimates ########
+    ################################################################
+    ##Joung and Chetham Parameters
+    #ion_names =             ['Li+',      'Na+',       'K+',        'Rb+',       'Cs+',       'F-',        'Cl-',       'Br-',       'I-']
+    #ion_qs =    numpy.array([1,           1,           1,           1,           1,           -1,          -1,          -1,          -1])
+    #ion_epsis = numpy.array([0.11709719,  0.365846031, 0.810369254, 1.37160683,  1.70096085,  0.014074976, 0.148912744, 0.245414194, 0.224603814])
+    #ion_sig =   numpy.array([0.196549675, 0.24794308,  0.30389715,  0.323090391, 0.353170773, 0.417552588, 0.461739606, 0.482458908, 0.539622469])
+    #ion_N = len(ion_names)
+
+    #spec_DelF = numpy.zeros(ion_N)
+    #spec_dDelF = numpy.zeros(ion_N)
+    #u_kln_P = numpy.zeros([nstates,ion_N + 1,energies.itermax])
+    #u_kln_P[:,0,:] = energies.u_kln[:,Ref_state,:]
+    #for i in xrange(ion_N):
+    #    epsi = ion_epsis[i]
+    #    sig = ion_sig[i]
+    #    q = ion_qs[i]
+    #    u_kln_P[:,i+1,:] = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
+    #(DeltaF_ij, dDeltaF_ij) = mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew-kab')
+    #for i in xrange(ion_N):
+    #    #Unwrap the data, reference state is in state 0
+    #    spec_DelF[i] = DeltaF_ij[0, 1+i]
+    #    spec_dDelF[i] = dDeltaF_ij[0, 1+i]
+    #spec_DelF *= kjpermolTokcal/kjpermolTokT
+    #spec_dDelF *= kjpermolTokcal/kjpermolTokT
+    #for i in xrange(ion_N):
+    #    print "Ion %s has relative FE of: %f +- %f kcal/mol" %(ion_names[i], spec_DelF[i],spec_dDelF[i])
+    #pdb.set_trace()
+    ################################################################
+    ###################### END OPTIONAL BLOCK ######################
+    ################################################################
+    
+
     ######## #Begin computing free energies ##########
     '''
     Check a few things before attemping free energy:
@@ -717,6 +754,39 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #Relative error, optional third graph
     reldDelF = numpy.abs(dDelF/DelF)
  
+
+    ##Charging free energy by Born Model
+    tip3p_dielectric = 82
+    BDelG = numpy.zeros([Nparm, Nparm, Nparm])
+    #add in free energy of the uncharged LJ sphere of equivalent size
+    LJBDelG = numpy.zeros(BDelG.shape)
+    electron_charge = 1.60218E-19 * units.coulombs
+    dielec_vac = 8.85419E-12 * (units.coulombs)**2 / (units.joules * units.meter * units.AVOGADRO_CONSTANT_NA)
+    enot = dielec_vac / electron_charge**2 
+    e0 = enot * units.kilocalories_per_mole * units.nanometer
+    for iq in xrange(Nparm):
+        for isig in xrange(Nparm):
+            BDelG[iq, :, isig] = [bornG(q_range[iq], sig_range[isig], e0, tip3p_dielectric)] * Nparm
+        LJBDelG[iq,:,:] = BDelG[iq,:,:]
+    numpy.save('BornGwithLJ.npy', LJBDelG)
+    pdb.set_trace()
+    
+    ##Find parameters close to target values
+    #ion_names = ['Li+', 'Na+', 'K+', 'Rb+', 'Cs+', 'F-', 'Cl-', 'Br-', 'I-']
+    #ion_N = len(ion_names)
+    #ion_F = numpy.array([-113.8, -88.7, -71.2, -66.0, -60.5, -119.7, -89.1, -82.7, -74.3])
+    #ion_q = [1,1,1,1,1,-1,-1,-1,-1]
+    #ionDelF = {}
+    ##Interoplate to find closest value at +-1
+    #ionDelF[1] = (DelF[38,:,:] + DelF[37,:,:])/2
+    #ionDelF[-1] = (DelF[12,:,:] + DelF[13,:,:])/2
+    #pdb.set_trace()
+    #for i in xrange(ion_N):
+    #    absarr = (numpy.abs(ionDelF[ion_q[i]] - ion_F[i]))
+    #    idxmin = numpy.unravel_index((numpy.abs(ionDelF[ion_q[i]] - ion_F[i])).argmin(), ionDelF[ion_q[i]].shape)
+    #    print "For %s with measured F=%f, the closest parameter is (%f,%f) for epsilon sigma with F=%f" %(ion_names[i], epsi_range[idxmin[0]]*kjpermolTokcal, sig_range[idxmin[1]], ionDelF[ion_q[i]][idxmin])
+    #pdb.set_trace()
+
     ################################################
     ################ region ID #####################
     ################################################

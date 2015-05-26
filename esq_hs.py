@@ -29,7 +29,7 @@ Special module to constuct H and S from set data
 #################### OPTIONS ####################
 savedata = True #Save/load dhdl data
 load_ukln = True #Save/load u_kln from file
-timekln = True #Time energy evaluation, skips actual free energy evaluation
+timekln = False #Time energy evaluation, skips actual free energy evaluation
 graphsfromfile=True #Generate graphs from the .npz arrays
 
 Ref_state = 1 #Reference state of sampling to pull from
