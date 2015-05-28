@@ -756,7 +756,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
  
 
     ##Charging free energy by Born Model
-    tip3p_dielectric = 82
+    tip3p_dielectric = 103
     BDelG = numpy.zeros([Nparm, Nparm, Nparm])
     #add in free energy of the uncharged LJ sphere of equivalent size
     LJBDelG = numpy.zeros(BDelG.shape)
@@ -764,11 +764,13 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     dielec_vac = 8.85419E-12 * (units.coulombs)**2 / (units.joules * units.meter * units.AVOGADRO_CONSTANT_NA)
     enot = dielec_vac / electron_charge**2 
     e0 = enot * units.kilocalories_per_mole * units.nanometer
+    rmins = numpy.load('LJEffHS.npz')['rmins']
     for iq in xrange(Nparm):
         for isig in xrange(Nparm):
-            BDelG[iq, :, isig] = [bornG(q_range[iq], sig_range[isig], e0, tip3p_dielectric)] * Nparm
+            #BDelG[iq, :, isig] = [bornG(q_range[iq], sig_range[isig], e0, tip3p_dielectric)] * Nparm
+            BDelG[iq, :, isig] = bornG(q_range[iq], rmins[:,isig], e0, tip3p_dielectric)
         LJBDelG[iq,:,:] = BDelG[iq,:,:]
-    numpy.save('BornGwithLJ.npy', LJBDelG)
+    numpy.save('BornGwithLJrdf0.npy', LJBDelG)
     pdb.set_trace()
     
     ##Find parameters close to target values

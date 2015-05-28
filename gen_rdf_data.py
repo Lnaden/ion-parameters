@@ -113,7 +113,9 @@ def execute(nstates, nbins=defbin, histrange=defaultdist, useO=False):
     #Generate empty histogram array: indexed: bin, k, frame
     totalhist = numpy.zeros([nbins, nstates, 0], dtype=numpy.float64)
     if useO:
+        pathtail = 'b%s'%nbins
         pathstr = 'lj%s/prod/rdfOhist%s.npz'
+        pathstr = 'lj%s/prod/rdfOhist%s' + pathtail + '.npz'
     else:
         pathstr = 'lj%s/prod/rdfhist%s.npz'
     #Cycle through each state
@@ -141,7 +143,7 @@ if __name__ == "__main__":
     from optparse import OptionParser
     parser = OptionParser()
     parser.add_option("--nstates", dest="nstates", default=None, help="Set the number of states", metavar="NSTATES")
-    parser.add_option("--nbins", dest="nbins", default=defbin, help="Set the number of histogram bins: Default %d" % defbin, metavar="NBINS")
+    parser.add_option("--nbins", dest="nbins",  type='int', default=defbin, help="Set the number of histogram bins: Default %d" % defbin, metavar="NBINS")
     parser.add_option("--minA", dest="minA", default=distmin, help="Set the histogram minimum. Default: %f Ang" % distmin, metavar="MINA")
     parser.add_option("--maxA", dest="maxA", default=distmax, help="Set the histogram maximum. Default: %f Ang" % distmax, metavar="MAXA")
     parser.add_option("-O", "--oxygen", action='store_true', dest="oxygen", default=False, help="Estimate RDF from oxygen only", metavar="OXYGEN")
