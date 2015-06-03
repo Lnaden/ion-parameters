@@ -7,7 +7,7 @@ Ref_state = 1 #Make sure this is the same ref_state as in esq_construct_ukln
 nstates = [21, 31, 41, 51, 61]
 nstates = [21,69]
 nstates = [21, 203]
-nstates = [21]
+#nstates = [21]
 
 def animate(q_samp_space, epsi_samp_space, sig_samp_space):
     epsi_min = epsi_samp_space[0]
