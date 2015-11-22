@@ -28,7 +28,8 @@ import gen_rdf_data as genrdf
 
 #################### OPTIONS ####################
 relativeErr = False #Create the relative error plot
-savedata = True #Save/load dhdl data
+savedata = False #Save/load dhdl data
+effnum = True #Effective number of samples tests
 load_ukln = True #Save/load u_kln from file
 timekln = False #Time energy evaluation, skips actual free energy evaluation
 graphsfromfile=True #Generate graphs from the .npz arrays
@@ -414,7 +415,7 @@ class consts(object): #Class to house all constant information
         self.shape = self.u_kln.shape
         self.units = True
 
-def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space, singlestate=None, singleparms=None, useO=False, crunchset=False):
+def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space, singlestate=None, singleparms=None, useO=False, crunchset=False, bootstrap=False, bootstrapcount=200):
     #Initilize limts
     sig3_samp_space = sig_samp_space**3
     #These are the limits used to compute the constant matricies
@@ -678,6 +679,10 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space, singlestate=
         pertq =    numpy.array([1,          1,           1,           1,           1,           -1,          -1,          -1,          -1])
         pertepsi = numpy.array([0.11709719,  0.365846031, 0.810369254, 1.37160683,  1.70096085,  0.014074976, 0.148912744, 0.245414194, 0.224603814])
         pertsig =  numpy.array([0.196549675, 0.24794308,  0.30389715,  0.323090391, 0.353170773, 0.417552588, 0.461739606, 0.482458908, 0.539622469])
+        #pertname =             ['Br-']
+        #pertq =    numpy.array([-1])
+        #pertepsi = numpy.array([0.245414194])
+        #pertsig =  numpy.array([0.482458908])
         Npert = len(pertq)
         if useO:
             filestring = 'pertrdfs/pertrdfOn%s%s.npz'
@@ -710,6 +715,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space, singlestate=
     #Begin computing expectations
     Erdfs = numpy.zeros([Npert, basebins])
     dErdfs = numpy.zeros([Npert, basebins])
+    eff_u_kln = numpy.zeros([energies.nstates, energies.nstates + Npert, energies.itermax])
+    eff_u_kln[:energies.nstates, :energies.nstates, :] = energies.u_kln
     
     for l in xrange(Npert):
         #if not savedata or not os.path.isfile('lj%s/rdf%sfromn%s.npz'%(nstates-Npert+l, nstates-Npert+l, nstates)):
@@ -717,18 +724,22 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space, singlestate=
             filecheck = filestring % (nstates, pertname[l])
         else:
             filecheck = filestring % (fileobjs[0]+l, fileobjs[1]+l, fileobjs[2])
-        if not savedata or not os.path.isfile(filecheck):
+        if not savedata or not os.path.isfile(filecheck) or effnum:
             print "Working on state %d/%d" %(l+1, Npert)
             q = pertq[l]
             epsi = pertepsi[l]
             sig = pertsig[l]
             #u_kn_P = numpy.zeros([nstates,energies.itermax])
             u_kn_P = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
-            for bin in xrange(basebins):
-                stdout.flush()
-                stdout.write('\rWorking on bin %d/%d'%(bin,basebins-1))
-                Erdfs[l, bin], dErdfs[l, bin] = mbar.computePerturbedExpectation(u_kn_P, rdfs[bin,:,:])
-            stdout.write('\n')
+            if effnum:
+                eff_u_kln[:,energies.nstates+l,:] = u_kn_P
+            else:
+                for bin in xrange(basebins):
+                    stdout.flush()
+                    stdout.write('\rWorking on bin %d/%d'%(bin,basebins-1))
+                    #Erdfs[l, bin], dErdfs[l, bin] = mbar.computePerturbedExpectation(u_kn_P, rdfs[bin,:,:])
+                    Erdfs[l, bin], dErdfs[l, bin] = mbar.computeExpectations(rdfs[bin,:,:], u_kn=u_kn_P, compute_uncertainty=False)
+                stdout.write('\n')
             if savedata:
                 #savez('lj%s/rdf%sfromn%s.npz'%(nstates-Npert+l, nstates-Npert+l, nstates), Erdfs=Erdfs[l,:], dErdfs=dErdfs[l,:])
                 if crunchset:
@@ -743,6 +754,63 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space, singlestate=
                 rdfdata = numpy.load(filestring % (fileobjs[0]+l, fileobjs[1]+l, fileobjs[2]))
             Erdfs[l,:] = rdfdata['Erdfs']
             dErdfs[l,:] = rdfdata['dErdfs']
+
+    #Effective number of samples
+    if effnum:
+        N_k = numpy.zeros(energies.nstates+Npert, dtype=numpy.int32)
+        f_k = numpy.zeros(energies.nstates+Npert)
+        N_k[:energies.nstates] = energies.N_k
+        f_k[:mbar.K] = mbar.f_k
+        eff_mbar = MBAR(eff_u_kln, N_k, verbose = True, initial_f_k=f_k, subsampling_protocol=[{'method':'L-BFGS-B','options':{'disp':True}}], subsampling=1)
+        for l in xrange(Npert):
+            w = numpy.exp(eff_mbar.Log_W_nk[:,mbar.K+l])
+            neff = 1.0/numpy.sum(w**2)
+            print "Effective number of samples for {0:s}: {1:f}".format(pertname[l], neff)
+        pdb.set_trace()
+
+
+    if bootstrap: #I spun this off into its own section, although it probably could have been folded into the previous
+        from numpy.random import random_integers
+        Nboot = bootstrapcount
+        ErdfsB = numpy.zeros([Nboot, Npert, basebins])
+        run_start_time = time.time()
+        number_of_iterations = Npert*Nboot
+        iteration = 0
+        for l in xrange(Npert): #Go through each bootstrap
+            print "Bootstraping on state %d/%d" %(l+1, Npert)
+            q = pertq[l]
+            epsi = pertepsi[l]
+            sig = pertsig[l]
+            #u_kn_P = numpy.zeros([nstates,energies.itermax])
+            u_kn_P = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
+            for Nb in xrange(Nboot): #Bootstrap
+                initial_time=time.time()
+                iteration += 1
+                u_kn_B = numpy.zeros(u_kn_P.shape)
+                rdfsB = numpy.zeros(rdfs.shape)
+                for k in xrange(nstates): #Roll random numbers
+                    N_k = energies.N_k[k]
+                    samplepool = random_integers(0,N_k-1,N_k)
+                    for i in xrange(len(samplepool)):
+                        u_kn_B[k,i] = u_kn_P[k,samplepool[i]] #Have to do this since slicing the first index alone reverses the return order for the last 2 indicies
+                        rdfsB[:,k,i] = rdfs[:,k,samplepool[i]]
+                #for bin in xrange(basebins):
+                for bin in xrange(60): #Cut down for time
+                    stdout.flush()
+                    #stdout.write('\rWorking on bootstrap %d/%d and bin %d/%d'%(Nb,Nboot-1,bin,basebins-1))
+                    stdout.write('\rWorking on bootstrap %d/%d and bin %d/%d'%(Nb,Nboot-1,bin,60-1))
+                    ErdfsB[Nb, l, bin] = mbar.computePerturbedExpectation(u_kn_B, rdfsB[bin,:,:], compute_uncertainty=False)[0] #Dont compute error for speed
+                laptime = time.clock()
+                # Show timing statistics. copied from Repex.py, copywrite John Chodera
+                final_time = time.time()
+                elapsed_time = final_time - initial_time
+                estimated_time_remaining = (final_time - run_start_time) / (iteration) * (number_of_iterations - iteration)
+                estimated_total_time = (final_time - run_start_time) / (iteration) * (number_of_iterations)
+                estimated_finish_time = final_time + estimated_time_remaining
+                print "Iteration took %.3f s." % elapsed_time
+                print "Estimated completion in %s, at %s (consuming total wall clock time %s)." % (str(datetime.timedelta(seconds=estimated_time_remaining)), time.ctime(estimated_finish_time), str(datetime.timedelta(seconds=estimated_total_time)))
+        savez('BootstrapedIonRDF.npz', Erdfs = ErdfsB)
+                    
 
     if singleparms is None and not crunchset:
         f,a = plt.subplots(Npert, 2)
@@ -800,6 +868,8 @@ if __name__ == "__main__":
     parser.add_option("--se", "--singlee", dest="singlee", default=None, type='float', help="Single e to estimate at, also needs q and s", metavar="SINGLEE")
     parser.add_option("--ss", "--singles", dest="singles", default=None, type='float', help="Single s to estimate at, also needs e and q", metavar="SINGLES")
     parser.add_option("-O", "--oxygen", action='store_true', dest="oxygen", default=False, help="Estimate RDF from oxygen only", metavar="OXYGEN")
+    parser.add_option("-B", "--bootstrap", action='store_true', default=False, dest='boot')
+    parser.add_option("--nb", type='int', default=200, dest='nboot')
     (options, args) = parser.parse_args()
     x = numpy.load('qes.npy')
     qs = x[:,0]
@@ -819,4 +889,4 @@ if __name__ == "__main__":
         singleparms = None
     #If this script is run with manaual execution, break here since its probably being run as debugging anyways.
     pdb.set_trace()
-    execute(nstates, qs, es, ss, singlestate=options.single, singleparms=singleparms, useO=options.oxygen, crunchset=options.set)
+    execute(nstates, qs, es, ss, singlestate=options.single, singleparms=singleparms, useO=options.oxygen, crunchset=options.set, bootstrap=options.boot, bootstrapcount=options.nboot)

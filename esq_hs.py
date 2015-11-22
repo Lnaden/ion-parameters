@@ -872,9 +872,9 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             return imgHplot, imgdHplot, H_scatter_noref, dH_scatter_noref, H_scatter_ref, dH_scatter_ref, Hline, dHline, Hqtitle
     aniH = ani.FuncAnimation(h, moveqH, range(Nparm), interval=150, blit=False, init_func=cleanupH)
     if relativeErr:
-        filename='Animated_charging_rel{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
+        filename='singleAnimated_charging_Hrel{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
     else:
-        filename='Animated_charging_H{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
+        filename='singleAnimated_charging_H{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
     #pdb.set_trace()
     aniH.save(filename, dpi=400)
     #save a single frame
@@ -1021,9 +1021,9 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
             return imgSplot, imgdSplot, Sqtitle, S_scatter_noref, dS_scatter_noref, S_scatter_ref, dS_scatter_ref, Sline, dSline
     aniS = ani.FuncAnimation(s, moveqS, range(Nparm), interval=150, blit=False, init_func=cleanupS)
     if relativeErr:
-        filename='Animated_charging_rel{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
+        filename='singleAnimated_charging_Srel{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
     else:
-        filename='Animated_charging_S{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
+        filename='singleAnimated_charging_S{myint:{width}}.mp4'.format(myint=nstates, width=len(str(nstates)))
     #pdb.set_trace()
     aniS.save(filename, dpi=400)
     #save a single frame

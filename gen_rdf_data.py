@@ -29,7 +29,7 @@ savedata = True #Save/load dhdl data
 load_ukln = True #Save/load u_kln from file
 timekln = False #Time energy evaluation, skips actual free energy evaluation
 graphsfromfile=True #Generate graphs from the .npz arrays
-load_rdf = True #Try to load RDF data or generate it yourself
+load_rdf = False #Try to load RDF data or generate it yourself
 
 Ref_state = 1 #Reference state of sampling to pull from
 
@@ -70,11 +70,14 @@ except:
     savez = numpy.savez
 
 
-def buildrdf(stateindex, nbins=defbin, histrange=defaultdist, useO=False):
+def buildrdf(stateindex, nbins=defbin, histrange=defaultdist, useO=False, fulltrr=False):
     #Create the universe
     base_path = os.path.join('/mnt', 'argon', 'data', 'ln8dc', 'ljsphere_es', 'lj%s' % stateindex, 'prod')
     topol_path = os.path.join(base_path, 'prod%s.gro' % stateindex)
-    traj_path = os.path.join(base_path, 'subprod%s.trr' % stateindex)
+    trrfile = 'prod%s.trr'
+    if not fulltrr: 
+        trrfile = 'sub' + trrfile
+    traj_path = os.path.join(base_path, trrfile % stateindex)
     universe = mda.Universe(topol_path, traj_path)
     #Set the two systems
     #The coordinate call to each of these updates with the updated timestep (ts) of the universe.trajectory

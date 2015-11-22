@@ -40,12 +40,13 @@ db_rand = True #Boolean. Choose random point inside cluster to sample (True), ot
 
 
 
-
+NA = units.AVOGADRO_CONSTANT_NA
 kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 T = 298 * units.kelvin
 kT = kB*T
 kjpermolTokT = units.kilojoules_per_mole / kT
 kjpermolTokcal = 1/4.184
+
 
 spacing=linspace
 
@@ -273,6 +274,21 @@ def cubemean(point, grid):
 def bornG(q, sig, e0, dielec):
     return (q**2 / (4*sig*e0*numpy.pi)) * (1.0/dielec - 1)
 
+def G_ion_cav(R, energy='kcalpermol'):
+    #Function to return dimensionless free energy in terms of cavitation free energy, just feed it an R with units
+    #Some water properties curtosey of Hunenberger and Reif
+    water_gamma = 71.99E-3 * units.joules / units.meter**2 #Surface Tension
+    P = 1*units.atmosphere #Pressure my simulations were run at
+    G_units =  (4*numpy.pi*NA * (water_gamma*R**2 + (1.0/3)*P*R**3))
+    if energy is 'kcalpermol':
+        G_out = G_units / units.kilocalories_per_mole
+    elif energy is 'kjpermol' or energy is 'kJpermol':
+        G_out = G_units / units.kilojoules_per_mole
+    elif energy is 'kT' or energy is 'kt':
+        G_out = G_units / units.kilojoules_per_mole * kjpermolTokT
+    else:
+        G_out = G_units 
+    return G_out
 
 class consts(object): #Class to house all constant information
 
