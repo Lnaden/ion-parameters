@@ -21,16 +21,33 @@ import dbscan
 import scipy.sparse as sparse
 import scipy.sparse.csgraph as csgraph
 
+'''
+This code is written to support specific GROMACS energy output files for single ion parameters in epsilon, sigma, and q space.
+Simulations run must be fully geometric mixing rules for both sigma_ij and epsilon_ij
+
+Main call is "execute(Nstates, q_samp_space, epsi_samp_space, sig_samp_space)" which expects:
+    Nstates : integer
+        number of sampled states that are used in this calculation
+    q_samp_space : 1D iterable of len >= Nstates
+        Sampled partial charges of the particle in units of elementary charge
+    epsi_samp_space : 1D iterable of len >= Nstates
+        Sampled particle epsilon_ii in units of kJ/mol
+    sig_samp_space : 1D iterable of len >= Nstates
+        Sampled particle sigma_ii in units of nm
+    
+    Note: q_- epsi_- and sig_samp_space can all be longer than Nstates, the code will just stop looking past the Nstates'th index
+'''
+
 
 
 #################### OPTIONS ####################
-relativeErr = False #Create the relative error plot
+relativeErr = False #Create the relative error plot, not very helpful since unknown errors can lead to NaNs in the graphs
 savedata = True #Save/load dhdl data
 load_ukln = True #Save/load u_kln from file
 timekln = False #Time energy evaluation, skips actual free energy evaluation
 graphsfromfile=True #Generate graphs from the .npz arrays
 
-Ref_state = 1 #Reference state of sampling to pull from
+Ref_state = 1 #Index of reference state of sampling to pull from.
 
 # Set of clustering options
 id_regions = True #Run clustering algorithm?
@@ -47,13 +64,13 @@ kT = kB*T
 kjpermolTokT = units.kilojoules_per_mole / kT
 kjpermolTokcal = 1/4.184
 
-
+#Used to also support logarithmic spacing, now is just linear spacing
 spacing=linspace
 
 
-#Main output controling vars:
+#output controling vars mostly legacy but some still in use:
 Nparm = 51 #51, 101, or 151
-sig_factor=1
+sig_factor=1 #What scaling factor to use on sigma, either sigma^1 or simga^3
 savefigs = False
 if Nparm == 151 or True:
     alle = True
@@ -162,11 +179,6 @@ def printFreeEnergy(DeltaF_ij, dDeltaF_ij):
         for j in range(nstates):
             print "%8.3f" % dDeltaF_ij[i,j],
         print ""
-def normalizeData(data):
-    data = data.astype(numpy.float)
-    min = numpy.min(data)
-    max = numpy.max(data)
-    return (data - min)/ (max-min)
 
 def find_g_t_states(u_kln, states=None, nequil=None):
     #Subsample multiple states, this assumes you want to subsample independent of what was fed in
@@ -290,9 +302,14 @@ def G_ion_cav(R, energy='kcalpermol'):
         G_out = G_units 
     return G_out
 
-class consts(object): #Class to house all constant information
+class consts(object): 
+    '''
+    Keep all basis function data and operations housed in a single location. Prevents user from having to manipulate every basis function energy.
+    '''
+#Class to house all constant information
 
     def _convertunits(self, converter):
+        #Flip between unit set. Probably could be replaced with cleaner function
         self.const_unaffected_matrix *= converter
         self.const_R_matrix *= converter
         self.const_A_matrix *= converter
@@ -318,9 +335,11 @@ class consts(object): #Class to house all constant information
             self.units = True
 
     def save_consts(self, filename):
+        #Create a npz array to save data for rapid loading on new run
         savez(filename, u_kln=self.u_kln, const_R_matrix=self.const_R_matrix, const_A_matrix=self.const_A_matrix, const_q_matrix=self.const_q_matrix, const_q2_matrix=self.const_q2_matrix, const_unaffected_matrix=self.const_unaffected_matrix)
     
     def determine_N_k(self, series):
+        #Determine how many samples there are in a given series, see the determine_all_N_k for useage
         npoints = len(series)
         #Go backwards to speed up process
         N_k = npoints
@@ -332,6 +351,8 @@ class consts(object): #Class to house all constant information
         return N_k
 
     def determine_all_N_k(self, force=False):
+        #Figure out how many samples there are in each k'th state by going backwards from the last index to find the first non-zero entry.
+        #This will miss any entries that actually are 0 energy on the tail though, but these are rare enough that you may want to recode this function anyways.
         if self.Nkset and not force:
             print "N_k is already set! Use the 'force' flag to manually set it"
             return
@@ -391,6 +412,9 @@ class consts(object): #Class to house all constant information
         self._itermax = iter
 
     def __init__(self, nstates, file=None, itermax=1):
+        '''
+        Primary call for this class. If a file is given, it will attempt to load all basis function data from the file, expecting the same names that self.save_consts would write out.
+        '''
         loaded = False
         self._itermax=itermax
         self.nstates=nstates
@@ -434,6 +458,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #They should match with LJ 0 and 5, ALWAYS
     q_min = -2.0
     q_max = +2.0
+    #Set the 2 main A and B states that the basis function energies are computed with respect to
     epsi_min = epsi_samp_space[0]
     epsi_max = epsi_samp_space[5]
     sig_min = sig_samp_space[0]
@@ -454,7 +479,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         qStartSpace = q_min
         qEndSpace = q_max
         if alle:
-            epsiEndSpace   = 3.6 #!!! Manual set
+            epsiEndSpace   = 3.6 #Manual set, I chose this value as it looks good for the range I was searching
         else:
             epsiEndSpace   = epsi_max
         spacename='linear'
@@ -466,12 +491,16 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
         qPlotEnd = qEndSpace
 
 
+    '''
+    Start data input
 
+    Expects GROMACS style data outputs
+    '''
     #generate sample length
     g_en_start = 19 #Row where data starts in g_energy output
     g_en_energy = 1 #Column where the energy is located
     niterations_max = 30001
-    #Min and max sigmas:
+    #Min and max sigmas, mostly helper functions:
     fC12 = lambda epsi,sig: 4*epsi*sig**12
     fC6 = lambda epsi,sig: 4*epsi*sig**6
     fsig = lambda C12, C6: (C12/C6)**(1.0/6)
@@ -770,25 +799,26 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     #Relative error, optional third graph
     reldDelF = numpy.abs(dDelF/DelF)
  
-
+    #Optional Block
     ##Charging free energy by Born Model
-    tip3p_dielectric = 103
-    BDelG = numpy.zeros([Nparm, Nparm, Nparm])
-    #add in free energy of the uncharged LJ sphere of equivalent size
-    LJBDelG = numpy.zeros(BDelG.shape)
-    electron_charge = 1.60218E-19 * units.coulombs
-    dielec_vac = 8.85419E-12 * (units.coulombs)**2 / (units.joules * units.meter * units.AVOGADRO_CONSTANT_NA)
-    enot = dielec_vac / electron_charge**2 
-    e0 = enot * units.kilocalories_per_mole * units.nanometer
-    rmins = numpy.load('LJEffHS.npz')['rmins']
-    for iq in xrange(Nparm):
-        for isig in xrange(Nparm):
-            #BDelG[iq, :, isig] = [bornG(q_range[iq], sig_range[isig], e0, tip3p_dielectric)] * Nparm
-            BDelG[iq, :, isig] = bornG(q_range[iq], rmins[:,isig], e0, tip3p_dielectric)
-        LJBDelG[iq,:,:] = BDelG[iq,:,:]
-    numpy.save('BornGwithLJrdf0.npy', LJBDelG)
-    pdb.set_trace()
+    #tip3p_dielectric = 103
+    #BDelG = numpy.zeros([Nparm, Nparm, Nparm])
+    ##add in free energy of the uncharged LJ sphere of equivalent size
+    #LJBDelG = numpy.zeros(BDelG.shape)
+    #electron_charge = 1.60218E-19 * units.coulombs
+    #dielec_vac = 8.85419E-12 * (units.coulombs)**2 / (units.joules * units.meter * units.AVOGADRO_CONSTANT_NA)
+    #enot = dielec_vac / electron_charge**2 
+    #e0 = enot * units.kilocalories_per_mole * units.nanometer
+    #rmins = numpy.load('LJEffHS.npz')['rmins']
+    #for iq in xrange(Nparm):
+    #    for isig in xrange(Nparm):
+    #        #BDelG[iq, :, isig] = [bornG(q_range[iq], sig_range[isig], e0, tip3p_dielectric)] * Nparm
+    #        BDelG[iq, :, isig] = bornG(q_range[iq], rmins[:,isig], e0, tip3p_dielectric)
+    #    LJBDelG[iq,:,:] = BDelG[iq,:,:]
+    #numpy.save('BornGwithLJrdf0.npy', LJBDelG)
+    #pdb.set_trace()
     
+    #Optional Block
     ##Find parameters close to target values
     #ion_names = ['Li+', 'Na+', 'K+', 'Rb+', 'Cs+', 'F-', 'Cl-', 'Br-', 'I-']
     #ion_N = len(ion_names)
@@ -811,6 +841,8 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
     '''
     This section will be used to identify where extra sampling should be done. optional flag set at the start of this section
     '''
+    #Does not try to rebuild the regions if its been done already, saves time when you are just wanting to generate graphs for example
+    #Also avoids generating NEW points that may interfere with already sampled points if you have the sampling randomization turned on from the options
     if id_regions and not os.path.isfile('resamp_points_n%i.npy'%nstates):
         err_threshold = 0.5 #kcal/mol
         #Define the features of the array by assigning labels
