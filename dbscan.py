@@ -34,6 +34,7 @@ class dbscan(object):
         #Set up iterator to grab values and index (mostly index)
         it = numpy.nditer(self.feature, flags=['multi_index'])
         counter=1
+        print "Iterating through points to identify clusters..."
         while not it.finished:
             index = numpy.array(it.multi_index)
             stdout.write('\r{0:d}/{1:d}'.format(counter,self.feature.size))

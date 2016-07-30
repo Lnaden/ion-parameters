@@ -16,7 +16,7 @@ import time
 import datetime
 import sys
 from mpl_toolkits.mplot3d import axes3d
-import timeseries
+from pymbar import timeseries
 import dbscan
 import scipy.sparse as sparse
 import scipy.sparse.csgraph as csgraph
@@ -163,7 +163,7 @@ def closest_point_with_index(point, features):
     dims = features.shape
     ndims = len(dims)
     #Round the point
-    rpoint = numpy.around(point, out=numpy.zeros(ndims,dtype=int))
+    rpoint = numpy.rint(point).astype(int)
     #Since the point should alway be on the interior, i should not have to worry about rounding
     return rpoint, features[tuple(numpy.array(x) for x in rpoint)] #Cast the array to the correct index scheme to return single number not 3 slices of 2-dimensions
 
@@ -735,7 +735,7 @@ def execute(nstates, q_samp_space, epsi_samp_space, sig_samp_space):
                         u_kln_P[:,lndx+1,:] = flamC12sqrt(epsi,sig)*energies.const_R_matrix + flamC6sqrt(epsi,sig)*energies.const_A_matrix + flamC1(q)*energies.const_q_matrix + flamC1(q)**2*energies.const_q2_matrix + energies.const_unaffected_matrix
                 if not timekln:
                     #Get free energies relative to the reference state (the index l=0)
-                    (DeltaF_ij, dDeltaF_ij) = mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew-kab')
+                    (DeltaF_ij, dDeltaF_ij) = mbar.computePerturbedFreeEnergies(u_kln_P, uncertainty_method='svd-ew')
                 if savedata and not timekln:
                     if not os.path.isdir('esq_%s' % spacename):
                         os.makedirs('esq_%s' % spacename) #Create folder

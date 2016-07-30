@@ -1,0 +1,134 @@
+; RUN CONTROL PARAMETERS = 
+integrator               = sd
+; start time and timestep in ps = 
+tinit                    = 0
+dt                       = 0.002
+
+; 6 ns.  This turns out to be long enough for systems without slow intramolecular degrees of freedom
+nsteps               = 3000000
+; mode for center of mass motion removal = 
+
+; We remove center of mass motion.  In periodic boundary conditions, the center of mass motion is spurious; the periodic system is the same in all translational directions.
+comm-mode                = Linear
+; number of steps for center of mass motion removal = 
+nstcomm                  = 10
+
+; Output frequency for energies to log file and energy file = 
+nstlog                   = 1000
+nstenergy                = 100
+; Disable corodinate writing
+nstxout                  = 0
+
+; NEIGHBORSEARCHING PARAMETERS = 
+; nblist update frequency = 
+nstlist                  = 10
+; ns algorithm (simple or grid) = 
+ns_type                  = grid
+; Periodic boundary conditions: xyz or no = 
+pbc                      = xyz
+
+; Neighbor list should be at least 2 A greater than the either rcut or rvdw
+
+; nblist cut-off         = 
+rlist                    = 1.15
+
+
+; OPTIONS FOR ELECTROSTATICS AND VDW: These parameters were all optimized for fast and accurate small molecule calculations.
+; See Shirts and Paliwal (2011)
+
+; Method for doing electrostatics = 
+coulombtype              = PME-Switch
+rcoulomb-switch          = 0.88
+rcoulomb                 = 0.9
+
+; Method for doing Van der Waals = 
+vdwtype                 = Switch
+; cut-off lengths        = 
+rvdw-switch              = 0.89
+rvdw                     = 0.9
+; Spacing for the PME/PPPM FFT grid = 
+fourierspacing           = 0.12
+; EWALD/PME/PPPM parameters = 
+pme_order                = 4
+ewald_rtol               = 1e-04
+ewald_geometry           = 3d
+epsilon_surface          = 0
+
+; Apply long range dispersion corrections for Energy and Pressure = 
+DispCorr                 = EnerPres
+
+---------------
+; Slow temperature and pressure coupling that won't disturb the dynamics too much.  Parrinello-Rahman 
+; gives very close to accurate volume distributions (Shirts, JCTC 2012)
+---------------
+
+; Groups to couple separately = 
+tc-grps                  = System
+; Time constant (ps) and reference temperature (K) = 
+tau_t                    = 5.0
+ref_t                    = 298
+; Pressure coupling      = 
+Pcoupl                   = Parrinello-Rahman
+; Time constant (ps), compressibility (1/bar) and reference P (bar) = 
+tau_p                    = 5.0
+compressibility          = 4.5e-5
+ref_p                    = 1.01325
+
+; We don't strictly need these, because it already has velocities
+; that are at the right temperature.  But including this is safer.
+----------
+gen_vel                  = yes
+gen_temp                 = 298
+gen_seed                 = 12  ; make sure you set the seed to be able to reproduce the simulation
+
+
+; constrain the hydrogen bonds, allowing longer timesteps.
+; Better to choose a higher lincs order just to be sure that 
+; the constraints are obeyed to high precision; it's not that expensive.
+constraints              = hbonds
+; Type of constraint algorithm = 
+constraint-algorithm     = lincs
+; Highest order in the expansion of the constraint coupling matrix = 
+lincs-order              = 12
+
+;--------------------
+; Free energy parameters DISABLED
+; free-energy              = no
+
+;--------
+; sc-alpha                 = 0
+-------
+
+; Which intermediate state are we simulating?
+-------
+; init-lambda-state        = X
+
+; What are the values of lambda at the intermediate states?
+;------- 
+coul-lambdas             = 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+vdw-lambdas              = 0.0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8 0.9 1.0
+
+; This makes sure we print out the differences in Hamiltonians between all states, and not just the neighboring states
+;--------
+calc-lambda-neighbors = -1
+
+; the frequency the free energy information is calculated.  This 
+; frequency (every 0.2 ps) is pretty good for small molecule solvation.
+;-------
+nstdhdl                  = 100 
+
+; not required, but useful if you are doing any temperature reweighting.  Without 
+; temperature reweighting, you don't need the total energy -- differences are enough
+dhdl-print-energy        = yes
+
+; We are doing free energies with the ethanol molecule alone
+; couple-moltype           = solute
+; only charging the molecule, so vdw is on the whole time
+; couple-lambda0           = vdw
+; in the final state, both are on
+; couple-lambda1           = vdw-q
+; we are keeping the intramolecular interactions ON in all the interactions
+; couple-intramol          = no
+
+
+

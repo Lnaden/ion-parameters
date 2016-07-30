@@ -1,0 +1,92 @@
+; ljsphere.top created by rdparm2gmx.pl Wed Mar  5 13:01:41 EST 2014
+
+[ defaults ]
+; nbfunc        comb-rule       gen-pairs       fudgeLJ fudgeQQ
+1               1               yes             0.5     0.8333
+
+[ atomtypes ]
+;name  bond_type    mass    charge   ptype         C6          C12
+LJS_C60      LJS      0.0000  0.0000  A   2.95897e+00  2.11035e+00 ;C60 properites
+rep_C60      LJS      0.0000  0.0000  A   0.00000e-00  2.11035e+00 ;C60 repulsive only
+LJS_UAm      LJS      0.0000  0.0000  A   1.32511e-02  3.56867e-05 ;UAmethane opls_066
+rep_UAm      LJS      0.0000  0.0000  A   0.00000e+00  3.56867e-05 ;UAmethane opls_066 repulsive only
+LJS_NOP      LJS      0.0000  0.0000  A   7.56207e-01  4.09158e-02 ;Neopentane Kuharski JACS 1984
+rep_NOP      LJS      0.0000  0.0000  A   0.00000e+00  4.09158e-02 ;Neopentane Kuharski JACS 1984 repuslive only
+LJS_LJ0      LJS      0.0000  0.0000  A   9.76563e-05  2.38419e-08 ;Point 0 minimum, e=.1, sig=.25
+rep_LJ0      LJS      0.0000  0.0000  A   0.00000e+00  2.38419e-08 ;
+LJS_LJ0o     LJS      0.0000  0.0000  A   4.00000e-04  4.00000e-13 ;Point 0 minimum Old value
+rep_LJ0o     LJS      0.0000  0.0000  A   0.00000e+00  4.00000e-13 ;
+null_LJ0     LJS      0.0000  0.0000  A   0.00000e+00  0.00000e+00 ; null
+LJS_LJ1      LJS      0.0000  0.0000  A   2.97917E-02  1.05660E-03 ;Point 1 
+rep_LJ1      LJS      0.0000  0.0000  A   0.00000E+00  1.05660E-03 ; 
+LJS_LJ2      LJS      0.0000  0.0000  A   1.66834E-01  2.17450E-02 ;Point 2
+rep_LJ2      LJS      0.0000  0.0000  A   0.00000E+00  1.84298E-02 ;
+LJS_LJ3      LJS      0.0000  0.0000  A   4.89963E-01  1.39572E-01 ;Point 3
+rep_LJ3      LJS      0.0000  0.0000  A   0.00000E+00  1.39572E-01 ;
+LJS_LJ4      LJS      0.0000  0.0000  A   1.07792E+00  5.37920E-01 ;Point 4
+rep_LJ4      LJS      0.0000  0.0000  A   0.00000E+00  5.37920E-01 ;
+LJS_LJ5      LJS      0.0000  0.0000  A   2.00944E+00  1.55302E+00 ;Point 5
+rep_LJ5      LJS      0.0000  0.0000  A   0.00000E+00  1.55302E+00 ;
+LJS_LJ6      LJS      0.0000  0.0000  A   3.36326E+00  3.72090E+00 ;Point 6
+rep_LJ6      LJS      0.0000  0.0000  A   0.00000E+00  3.72090E+00 ;
+LJS_LJ7      LJS      0.0000  0.0000  A   5.21813E+00  7.82438E+00 ;Point 7
+rep_LJ7      LJS      0.0000  0.0000  A   0.00000E+00  7.82438E+00 ;
+LJS_LJ8      LJS      0.0000  0.0000  A   7.65277E+00  1.49400E+01 ;Point 8
+rep_LJ8      LJS      0.0000  0.0000  A   0.00000E+00  1.49400E+01 ;
+LJS_LJ9      LJS      0.0000  0.0000  A   1.07459E+01  2.64851E+01 ;Point 9
+rep_LJ9      LJS      0.0000  0.0000  A   0.00000E+00  2.64851E+01 ;
+LJS_LJ10     LJS      0.0000  0.0000  A   1.43327E+01  4.27973E+01 ;Point 10 max
+rep_LJ10     LJS      0.0000  0.0000  A   0.00000E+00  4.27973E+01 ;
+LJS_LJ11     LJS      0.0000  0.0000  A   2.33280E-03  1.70061E-06 ;Point 11 spot
+rep_LJ11     LJS      0.0000  0.0000  A   0.00000E+00  1.70061E-06 ;
+opls_111      OW    15.99940  -0.834  A   2.48970e-03  2.43509e-06 ;TIP3P O
+opls_112      HW     1.00800  0.4170  A   0.00000e+00  0.00000e+00 ;TIP3P H
+
+;The LJ sphere
+[ moleculetype ]
+; Name            nrexcl
+solute             3
+
+[ atoms ]
+;   nr       type  resnr residue  atom   cgnr     charge       mass    typeB    chargeB
+     1    LJS_LJ11      1    LJS    LJS      1    0.00000  72.200000
+
+;TIP3P Water
+[ moleculetype ]
+; molname       nrexcl
+SOL             2
+
+[ atoms ]
+; id    at type res nr  residu name     at name         cg nr   charge
+1     opls_111  1       SOL              OW             1       -0.834
+2     opls_112  1       SOL             HW1             1        0.417
+3     opls_112  1       SOL             HW2             1        0.417
+
+#ifndef FLEXIBLE
+[ settles ]
+; i     j       funct   length
+1       1       0.09572 0.15139
+
+[ exclusions ]
+1       2       3
+2       1       3
+3       1       2
+#else
+[ bonds ]
+; i     j       funct   length  force.c.
+1       2       1       0.09572 502416.0 0.09572        502416.0
+1       3       1       0.09572 502416.0 0.09572        502416.0
+
+
+[ angles ]
+; i     j       k       funct   angle   force.c.
+2       1       3       1       104.52  628.02  104.52  628.02
+#endif
+
+[ system ]
+1 system
+
+[ molecules ]
+; Compound        nmols
+solute            1
+SOL               1195
